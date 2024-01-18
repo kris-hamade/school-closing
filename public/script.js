@@ -3,58 +3,63 @@ document.addEventListener('DOMContentLoaded', function () {
     const ws = new WebSocket('ws://localhost:3023');
     const statusDiv = document.getElementById('status');
     const userCountDiv = document.getElementById('user-count');
+    const isdSelector = document.getElementById('isd-selector');
 
+    let lastReceivedData = {}; // Store the last received data
+
+    // Connect to WebSocket
     const connectWebSocket = () => {
-        const ws = new WebSocket('ws://localhost:3023');
-
         ws.onopen = () => {
             console.log('Connected to WebSocket');
             statusDiv.textContent = 'Connected to WebSocket server';
             statusDiv.style.color = 'green';
         };
+
+        ws.onmessage = (event) => {
+            try {
+                console.log('Received raw message:', event.data);
+                const message = JSON.parse(event.data);
+
+                if (message.type === 'closureData') {
+                    lastReceivedData = message.data; // Store the data
+                    populateISDOptions(message.data); // Populate dropdown options
+                    updatePage(message.data, isdSelector.value); // Initial update
+                } else if (message.type === 'userCount') {
+                    userCountDiv.textContent = `Active users: ${message.count}`;
+                }
+            } catch (error) {
+                console.error('Error processing WebSocket message:', error);
+            }
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket Error:', error);
+            statusDiv.textContent = 'WebSocket connection error';
+            statusDiv.style.color = 'red';
+        };
+
+        ws.onclose = () => {
+            console.log('WebSocket Disconnected. Attempting to Reconnect...');
+            statusDiv.textContent = 'Disconnected from WebSocket server. Reconnecting...';
+            statusDiv.style.color = 'orange';
+            setTimeout(connectWebSocket, 5000); // Attempt to reconnect every 5 seconds
+        };
     }
 
-    ws.onmessage = (event) => {
-        try {
-            console.log('Received raw message:', event);
-            const message = JSON.parse(event.data);
-            //console.log('Parsed message:', message);
+    connectWebSocket();
 
-            // Additional logging to check the structure
-            //console.log('Message keys:', Object.keys(message));
-
-            if (message.type === 'closureData') {
-                //console.log('Received closure data:', message.data);
-                updatePage(message.data);
-            } else if (message.type === 'userCount') {
-                userCountDiv.textContent = `Active users: ${message.count}`;
-            }
-        } catch (error) {
-            console.error('Error processing WebSocket message:', error);
-        }
-    };
-
-    ws.onerror = (error) => {
-        console.error('WebSocket Error:', error);
-        statusDiv.textContent = 'WebSocket connection error';
-        statusDiv.style.color = 'red';
-    };
-
-    ws.onclose = () => {
-        console.log('WebSocket Disconnected. Attempting to Reconnect...');
-        statusDiv.textContent = 'Disconnected from WebSocket server. Reconnecting...';
-        statusDiv.style.color = 'orange';
-        setTimeout(connectWebSocket, 5000); // Attempt to reconnect every 5 seconds
-    };
-
-    const updatePage = (data) => {
+    const updatePage = (data, selectedISD = 'all') => {
         console.log('Starting to update page with data:', data);
-
+        // Hide the loader
+        document.getElementById('loader').style.display = 'none';
+        
         // Clear existing content
         container.innerHTML = '';
 
         for (let isd in data) {
             //console.log('ISD:', isd);
+            if (selectedISD !== 'all' && selectedISD !== isd) continue; // Filter based on selected ISD
+
             const isdDiv = document.createElement('div');
             isdDiv.className = "mb-8";
             const isdHeader = document.createElement('h2');
@@ -99,6 +104,16 @@ document.addEventListener('DOMContentLoaded', function () {
         console.log('Page update complete');
     };
 
-    connectWebSocket();
-});
+    const populateISDOptions = (data) => {
+        Object.keys(data).forEach(isd => {
+            const option = document.createElement('option');
+            option.value = isd;
+            option.textContent = isd;
+            isdSelector.appendChild(option);
+        });
+    };
 
+    isdSelector.addEventListener('change', function () {
+        updatePage(lastReceivedData, this.value);
+    });
+});
