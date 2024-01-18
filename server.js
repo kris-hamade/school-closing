@@ -9,7 +9,11 @@ const http = require('http');
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
-const port = 3023;
+
+// Use process.env.PORT and process.env.HOST to set the port and host from environment variables
+const PORT = process.env.PORT || 3023;
+const HOST = process.env.HOST || '0.0.0.0'; // Default to '0.0.0.0' (all interfaces)
+
 
 let activeUsers = 0;
 
@@ -117,6 +121,6 @@ setInterval(() => {
     broadcastClosures();
 }, 300000); // Every 5 minutes
 
-server.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
+server.listen(PORT, HOST, () => {
+    console.log(`Server running at http://${HOST}:${PORT}/`);
 });
