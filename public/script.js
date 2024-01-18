@@ -1,18 +1,39 @@
 document.addEventListener('DOMContentLoaded', function () {
     const container = document.getElementById('closure-container');
+    const loader = document.getElementById('loader');
     const ws = new WebSocket('ws://localhost:3023');
     const statusDiv = document.getElementById('status');
     const userCountDiv = document.getElementById('user-count');
     const isdSelector = document.getElementById('isd-selector');
+    const darkModeToggle = document.getElementById('dark-mode-toggle');
+    const html = document.documentElement;
 
-    let lastReceivedData = {}; // Store the last received data
-
+    document.getElementById('dark-mode-toggle').addEventListener('change', function () {
+        if (this.checked) {
+            document.documentElement.classList.add('dark');
+            localStorage.setItem('theme', 'dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+            localStorage.setItem('theme', 'light');
+        }
+    });
+    window.onload = () => {
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        if (savedTheme === 'dark') {
+            darkModeToggle.checked = true;
+            html.classList.add('dark');
+        } else {
+            darkModeToggle.checked = false;
+            html.classList.remove('dark');
+        }
+    };
     // Connect to WebSocket
     const connectWebSocket = () => {
         ws.onopen = () => {
             console.log('Connected to WebSocket');
             statusDiv.textContent = 'Connected to WebSocket server';
             statusDiv.style.color = 'green';
+            loader.style.display = 'block'; // Show loader
         };
 
         ws.onmessage = (event) => {
@@ -51,8 +72,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const updatePage = (data, selectedISD = 'all') => {
         console.log('Starting to update page with data:', data);
         // Hide the loader
-        document.getElementById('loader').style.display = 'none';
-        
+        loader.style.display = 'none'; // Hide loader
+
         // Clear existing content
         container.innerHTML = '';
 

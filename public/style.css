@@ -9,6 +9,8 @@ body {
 }
 
 .loader {
+    display: none;
+    /* Initially hidden */
     border: 5px solid #f3f3f3;
     border-top: 5px solid #3498db;
     border-radius: 50%;
@@ -27,3 +29,13 @@ body {
         transform: rotate(360deg);
     }
 }
+
+/* Toggle Switch Styles */
+.toggle-bg {
+    transition: .4s;
+}
+
+.toggle-dot {
+    transition: .4s;
+}
+

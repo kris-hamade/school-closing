@@ -4,31 +4,37 @@
     <meta charset="UTF-8" />
     <title>Oakland Schools Closures</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css" />
   </head>
-  <body class="bg-gray-100 font-sans leading-normal tracking-normal">
-    <nav class="bg-gray-800 p-4">
-      <div class="container mx-auto">
-        <div class="flex items-center justify-center">
-          <div class="text-white text-3xl">Michigan School Closures</div>
+  <body class="bg-gray-100 dark:bg-gray-900 font-sans leading-normal tracking-normal">
+    <nav class="bg-gray-800 dark:bg-gray-700 p-4 shadow">
+      <div class="container mx-auto flex justify-between">
+        <div class="text-white text-3xl">Michigan School Closures</div>
+        <!-- Dark Mode Toggle -->
+        <div class="flex items-center">
+
+          <div class="relative">
+            <input id="dark-mode-toggle" type="checkbox" class="hidden" checked />
+
+          </div>
         </div>
       </div>
     </nav>
-    <select id="isd-selector">
-      <option value="all">All ISDs</option>
-      <!-- Options will be added dynamically here -->
-    </select>
+    <div class="container mx-auto p-4">
+      <select id="isd-selector" class="p-2 rounded border border-gray-300 dark:border-gray-700">
+        <option value="all">All ISDs</option>
+        <!-- Options will be added dynamically here -->
+      </select>
 
-    <!-- Loader -->
-    <div id="loader" class="loader"></div>
+      <!-- Loader -->
+      <div id="loader" class="loader hidden"></div>
 
-    <div id="closure-container" class="mt-12"></div>
-
-    <footer>
+      <div id="closure-container" class="mt-12"></div>
+    </div>
+    <footer class="text-center p-4">
       <div id="status">Waiting for WebSocket connection...</div>
       <div id="user-count">Active users: 0</div>
     </footer>
-
     <script src="script.js"></script>
   </body>
 </html>
