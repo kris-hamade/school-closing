@@ -828,6 +828,17 @@
                 "Manton Consolidated Schools",
                 "Mesick Consolidated Schools"
             ]
+        },
+        "Other": {
+            "Misc": [
+                "Foster's Childcare and Learning Cen",
+                "LACC Childcare Acdmy",
+                "Merrill Palmer Skillman Inst ECC",
+                "New Morning",
+                "Suburban Truck Driving School",
+                "Wayne County Community College",
+                "Wyandotte Christian Academy"
+            ]
         }
     }
 }
