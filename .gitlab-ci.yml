@@ -34,7 +34,7 @@ deploy_prod:
     - ssh -i $ID_RSA_CLOUD -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "docker login -u $CI_REGISTRY_USER -p $CI_JOB_TOKEN $CI_REGISTRY"
     - ssh -i $ID_RSA_CLOUD -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "docker pull $TAG_COMMIT"
     - ssh -i $ID_RSA_CLOUD -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "docker container rm -f school-closing || true"
-    - ssh -i $ID_RSA_CLOUD -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "docker run -d -p $PORT:3023 --name school-closing -e CLOSNG_DATA_1=$CLOSING_DATA_1 -v $CI_PROJECT_DIR/data:/data $TAG_COMMIT"
+    - ssh -i $ID_RSA_CLOUD -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "docker run -d -p $PORT:3023 --name school-closing -e CLOSING_DATA_1=$CLOSING_DATA_1 -v $CI_PROJECT_DIR/data:/data $TAG_COMMIT"
   tags:
     - cloud
   rules:
