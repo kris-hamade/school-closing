@@ -3,8 +3,11 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const fuzzball = require('fuzzball');
 const express = require('express');
+const dotenv = require('dotenv');
 
 const app = express();
+
+dotenv.config();
 
 // Use process.env.PORT and process.env.HOST to set the port and host from environment variables
 const PORT = process.env.PORT || 3023;
