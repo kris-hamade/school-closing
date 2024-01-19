@@ -5,6 +5,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const darkModeToggle = document.getElementById('dark-mode-toggle');
     const html = document.documentElement;
 
+    let lastReceivedData = {};
+
     document.getElementById('dark-mode-toggle').addEventListener('change', function () {
         if (this.checked) {
             document.documentElement.classList.add('dark');
@@ -98,6 +100,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         console.log('Page update complete');
+        lastReceivedData = data;
     };
 
     const populateISDOptions = (data) => {
