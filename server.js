@@ -3,19 +3,16 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const fuzzball = require('fuzzball');
 const express = require('express');
-const WebSocket = require('ws');
-const http = require('http');
 
 const app = express();
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
 
 // Use process.env.PORT and process.env.HOST to set the port and host from environment variables
 const PORT = process.env.PORT || 3023;
 const HOST = process.env.HOST || '0.0.0.0'; // Default to '0.0.0.0' (all interfaces)
 
-
-let activeUsers = 0;
+app.listen(PORT, HOST, () => {
+    console.log(`Server listening on port ${PORT}`);
+});
 
 app.use(express.static('public')); // Serve static files from 'public' folder
 
@@ -86,41 +83,17 @@ const broadcastClosures = async () => {
     });
 };
 
-// Setup WebSocket connection
-wss.on('connection', ws => {
-    console.log('Client connected');
-    activeUsers++;
-    broadcastUserCount(); // Broadcast user count on new connection
-
-    ws.on('close', () => {
-        console.log('Client disconnected');
-        activeUsers--;
-        broadcastUserCount(); // Broadcast user count on disconnection
-    });
-
-    broadcastClosures(); // Broadcast closures when a client connects
+app.get('/api/closures', async (req, res) => {
+    try {
+        const closures = await fetchClosures();
+        res.json(closures);
+    } catch (error) {
+        console.error('Failed to get closure data:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 });
-
-const broadcastUserCount = () => {
-    const message = {
-        type: 'userCount',
-        count: activeUsers
-    };
-
-    wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(message));
-        }
-    });
-};
-
-broadcastClosures(); // Broadcast when the server starts
 
 // Periodically check for updates
 setInterval(() => {
     broadcastClosures();
 }, 300000); // Every 5 minutes
-
-server.listen(PORT, HOST, () => {
-    console.log(`Server running at http://${HOST}:${PORT}/`);
-});

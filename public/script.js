@@ -1,9 +1,6 @@
 document.addEventListener('DOMContentLoaded', function () {
     const container = document.getElementById('closure-container');
     const loader = document.getElementById('loader');
-    const ws = new WebSocket('wss://snow.hamy.cloud');
-    const statusDiv = document.getElementById('status');
-    const userCountDiv = document.getElementById('user-count');
     const isdSelector = document.getElementById('isd-selector');
     const darkModeToggle = document.getElementById('dark-mode-toggle');
     const html = document.documentElement;
@@ -27,47 +24,25 @@ document.addEventListener('DOMContentLoaded', function () {
             html.classList.remove('dark');
         }
     };
-    // Connect to WebSocket
-    const connectWebSocket = () => {
-        ws.onopen = () => {
-            console.log('Connected to WebSocket');
-            statusDiv.textContent = 'Connected to WebSocket server';
-            statusDiv.style.color = 'green';
-            loader.style.display = 'block'; // Show loader
-        };
 
-        ws.onmessage = (event) => {
-            try {
-                console.log('Received raw message:', event.data);
-                const message = JSON.parse(event.data);
-
-                if (message.type === 'closureData') {
-                    lastReceivedData = message.data; // Store the data
-                    populateISDOptions(message.data); // Populate dropdown options
-                    updatePage(message.data, isdSelector.value); // Initial update
-                } else if (message.type === 'userCount') {
-                    userCountDiv.textContent = `Active users: ${message.count}`;
-                }
-            } catch (error) {
-                console.error('Error processing WebSocket message:', error);
+    const fetchClosureData = async () => {
+        try {
+            const response = await fetch('/api/closures');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
-        };
-
-        ws.onerror = (error) => {
-            console.error('WebSocket Error:', error);
-            statusDiv.textContent = 'WebSocket connection error';
-            statusDiv.style.color = 'red';
-        };
-
-        ws.onclose = () => {
-            console.log('WebSocket Disconnected. Attempting to Reconnect...');
-            statusDiv.textContent = 'Disconnected from WebSocket server. Reconnecting...';
-            statusDiv.style.color = 'orange';
-            setTimeout(connectWebSocket, 5000); // Attempt to reconnect every 5 seconds
-        };
+            const data = await response.json();
+            // Use the data to update the page
+            updatePage(data, isdSelector.value);
+            populateISDOptions(data); // Populate dropdown options
+        } catch (error) {
+            console.error('Error fetching closure data:', error);
+            // Handle errors, e.g., by showing a message to the user
+        }
     }
 
-    connectWebSocket();
+    // Call fetchClosureData to get the data initially
+    fetchClosureData();
 
     const updatePage = (data, selectedISD = 'all') => {
         console.log('Starting to update page with data:', data);
@@ -137,4 +112,15 @@ document.addEventListener('DOMContentLoaded', function () {
     isdSelector.addEventListener('change', function () {
         updatePage(lastReceivedData, this.value);
     });
+});
+
+// Replace the WebSocket reconnect logic with a simple periodic refresh using setInterval
+setInterval(() => {
+    fetchClosureData();
+}, 300000); // Every 5 minutes
+
+
+// Modify the isdSelector event listener to call fetchClosureData when the ISD changes
+isdSelector.addEventListener('change', function () {
+    fetchClosureData();
 });
