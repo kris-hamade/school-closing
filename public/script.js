@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', function () {
     const container = document.getElementById('closure-container');
     const loader = document.getElementById('loader');
-    const ws = new WebSocket('wss://snow.hamy.cloud:8985');
+    const ws = new WebSocket('wss://snow.hamy.cloud');
     const statusDiv = document.getElementById('status');
     const userCountDiv = document.getElementById('user-count');
     const isdSelector = document.getElementById('isd-selector');
