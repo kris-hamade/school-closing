@@ -16,7 +16,7 @@ app.listen(PORT, HOST, () => {
 
 app.use(express.static('public')); // Serve static files from 'public' folder
 
-const url = 'https://www.wxyz.com/weather/school-closings-delays';
+const url = process.env.CLOSING_DATA_1;
 
 const fetchClosures = async () => {
     console.log("Fetching closures data...");
