@@ -68,21 +68,6 @@ const fetchClosures = async () => {
     }
 };
 
-// Broadcast to all connected clients
-const broadcastClosures = async () => {
-    const closures = await fetchClosures();
-
-    const message = {
-        type: 'closureData', // Add this line to include the 'type' field
-        data: closures
-    };
-    wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify(message)); // Send the modified message
-        }
-    });
-};
-
 app.get('/api/closures', async (req, res) => {
     try {
         const closures = await fetchClosures();
@@ -95,5 +80,5 @@ app.get('/api/closures', async (req, res) => {
 
 // Periodically check for updates
 setInterval(() => {
-    broadcastClosures();
-}, 300000); // Every 5 minutes
+    fetchClosures();
+}, 60000); // Every 5 minutes
