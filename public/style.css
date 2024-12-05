@@ -1,11 +1,20 @@
 body {
-    background-color: #f7fafc;
+    background-color: #1f2022;
+}
+
+h2, h3, p {
+    color: white
 }
 
 #closure-container {
     max-width: 800px;
     margin: auto;
     padding: 20px;
+}
+
+#isd-selector {
+    background-color: #121212;
+    border-color: #383838;
 }
 
 .loader {
@@ -39,3 +48,7 @@ body {
     transition: .4s;
 }
 
+.text-green-500 {
+    --darkreader-text--tw-text-opacity: 1;
+    color: rgb(79, 240, 186);
+}
