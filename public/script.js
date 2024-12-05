@@ -2,30 +2,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const container = document.getElementById('closure-container');
     const loader = document.getElementById('loader');
     const isdSelector = document.getElementById('isd-selector');
-    const darkModeToggle = document.getElementById('dark-mode-toggle');
-    const html = document.documentElement;
+    const lastUpdatedElement = document.getElementById('last-updated');
 
     let lastReceivedData = {};
-
-    document.getElementById('dark-mode-toggle').addEventListener('change', function () {
-        if (this.checked) {
-            document.documentElement.classList.add('dark');
-            localStorage.setItem('theme', 'dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-            localStorage.setItem('theme', 'light');
-        }
-    });
-    window.onload = () => {
-        const savedTheme = localStorage.getItem('theme') || 'dark';
-        if (savedTheme === 'dark') {
-            darkModeToggle.checked = true;
-            html.classList.add('dark');
-        } else {
-            darkModeToggle.checked = false;
-            html.classList.remove('dark');
-        }
-    };
 
     const fetchClosureData = async () => {
         try {
@@ -37,11 +16,12 @@ document.addEventListener('DOMContentLoaded', function () {
             // Use the data to update the page
             updatePage(data, isdSelector.value);
             populateISDOptions(data); // Populate dropdown options
+            updateLastUpdated(); // Update the timestamp after fetching data
         } catch (error) {
             console.error('Error fetching closure data:', error);
             // Handle errors, e.g., by showing a message to the user
         }
-    }
+    };
 
     // Call fetchClosureData to get the data initially
     fetchClosureData();
@@ -55,7 +35,6 @@ document.addEventListener('DOMContentLoaded', function () {
         container.innerHTML = '';
 
         for (let isd in data) {
-            //console.log('ISD:', isd);
             if (selectedISD !== 'all' && selectedISD !== isd) continue; // Filter based on selected ISD
 
             const isdDiv = document.createElement('div');
@@ -66,7 +45,6 @@ document.addEventListener('DOMContentLoaded', function () {
             isdDiv.appendChild(isdHeader);
 
             for (let county in data[isd]) {
-                //console.log('County:', county);
                 const countyDiv = document.createElement('div');
                 countyDiv.className = "ml-4 mb-4";
                 const countyHeader = document.createElement('h3');
@@ -78,7 +56,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 let closedDistricts = 0;
 
                 for (let district in data[isd][county]) {
-                    //console.log('District:', district);
                     const districtData = data[isd][county][district];
                     const districtDiv = document.createElement('div');
                     districtDiv.className = "ml-8";
@@ -103,6 +80,12 @@ document.addEventListener('DOMContentLoaded', function () {
         lastReceivedData = data;
     };
 
+    const updateLastUpdated = () => {
+        const now = new Date();
+        const lastUpdatedText = `Last Updated: ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
+        lastUpdatedElement.textContent = lastUpdatedText;
+    };
+
     const populateISDOptions = (data) => {
         Object.keys(data).forEach(isd => {
             const option = document.createElement('option');
@@ -114,16 +97,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
     isdSelector.addEventListener('change', function () {
         updatePage(lastReceivedData, this.value);
+        updateLastUpdated(); // Update the timestamp on ISD change
     });
-});
 
-// Replace the WebSocket reconnect logic with a simple periodic refresh using setInterval
-setInterval(() => {
-    fetchClosureData();
-}, 300000); // Every 5 minutes
-
-
-// Modify the isdSelector event listener to call fetchClosureData when the ISD changes
-isdSelector.addEventListener('change', function () {
-    fetchClosureData();
+    // Periodic data refresh
+    setInterval(() => {
+        fetchClosureData();
+    }, 300000); // Every 5 minutes
 });
