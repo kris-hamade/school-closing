@@ -71,17 +71,27 @@ const fetchClosures = async () => {
     }
 };
 
+// Fetch closures data initially
+let closures = {};
+
+const initializeClosures = async () => {
+    closures = await fetchClosures();
+    console.log("Closures: ", closures);
+};
+
+initializeClosures();
+
+// Periodically check for updates
+setInterval(async () => {
+    closures = await fetchClosures();
+    console.log("Closures: ", closures);
+}, 250000); // Every 2 1/2 minutes
+
 app.get('/api/closures', async (req, res) => {
     try {
-        const closures = await fetchClosures();
         res.json(closures);
     } catch (error) {
         console.error('Failed to get closure data:', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
-
-// Periodically check for updates
-setInterval(() => {
-    fetchClosures();
-}, 60000); // Every 5 minutes
