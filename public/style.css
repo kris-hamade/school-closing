@@ -2,32 +2,60 @@ body {
     background-color: #1f2022;
 }
 
-h2, h3, p {
-    color: white
+h2 {
+    font-size: 1.8rem; /* Larger font for ISD headers */
+    color: #ffffff; /* Ensure consistency */
 }
 
-#closure-container {
-    max-width: 800px;
-    margin: auto;
-    padding: 20px;
+h3 {
+    font-size: 1.4rem; /* Slightly smaller for counties */
+    color: #dcdcdc; /* Subtle contrast for differentiation */
 }
+
+p {
+    font-size: 1rem; /* Default font size for body text */
+    color: #ffffff;
+}
+
+
+#closure-container {
+    max-width: 900px; /* Slightly wider container */
+    margin: 20px auto; /* Add vertical spacing */
+    padding: 20px;
+    background-color: #1e1e1e; /* Background for better readability */
+    border-radius: 10px; /* Rounded corners for modern look */
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.5); /* Subtle shadow for depth */
+}
+
 
 #isd-selector {
     background-color: #121212;
     border-color: #383838;
+    color: white; /* Dropdown text color */
 }
 
+#isd-selector option {
+    background-color: #121212; /* Matches dropdown */
+    color: white;
+}
+
+h2, h3, p {
+    color: white;
+}
+
+
+
 .loader {
-    display: none;
-    /* Initially hidden */
-    border: 5px solid #f3f3f3;
-    border-top: 5px solid #3498db;
+    display: block;
+    border: 5px solid #1f2022; /* Match background */
+    border-top: 5px solid #4caf50; /* Accent color */
     border-radius: 50%;
     width: 50px;
     height: 50px;
-    animation: spin 2s linear infinite;
+    animation: spin 1.5s linear infinite;
     margin: 20px auto;
 }
+
 
 @keyframes spin {
     0% {

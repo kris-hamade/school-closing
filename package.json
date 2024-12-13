@@ -19,6 +19,7 @@
 		"vite": "^6.0.0"
 	},
 	"dependencies": {
+		"@sveltejs/adapter-node": "^5.2.10",
 		"axios": "^1.7.9",
 		"bootstrap": "^5.3.3",
 		"cheerio": "^1.0.0",
