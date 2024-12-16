@@ -1,12 +1,12 @@
 import { json } from '@sveltejs/kit';
-import fs from 'fs';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import * as fuzzball from 'fuzzball';
 
 const url = process.env.CLOSING_DATA_1;
 
-// Function to fetch closure data
+import michiganData from './states/michigan.json';
+
 const fetchClosures = async () => {
     console.log('Fetching closures data...');
     try {
@@ -23,7 +23,6 @@ const fetchClosures = async () => {
             }
         });
 
-        const michiganData = JSON.parse(fs.readFileSync('states/michigan.json', 'utf8'));
         const matchThreshold = 90;
         let closuresByISD = {};
 
@@ -54,7 +53,6 @@ const fetchClosures = async () => {
         return {}; // Return empty data in case of error
     }
 };
-
 // Cache the closures data
 let cachedClosures = {};
 
