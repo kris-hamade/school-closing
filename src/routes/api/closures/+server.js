@@ -4,7 +4,7 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import * as fuzzball from 'fuzzball';
 
-const url = process.env.CLOSING_DATA_1 ;
+const url = process.env.CLOSING_DATA_1;
 
 // Function to fetch closure data
 const fetchClosures = async () => {
