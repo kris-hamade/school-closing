@@ -5,7 +5,7 @@ import * as fuzzball from 'fuzzball';
 
 const url = process.env.CLOSING_DATA_1;
 
-import michiganData from './states/michigan.json';
+import michiganData from '$lib/states/michigan.json';
 
 const fetchClosures = async () => {
     console.log('Fetching closures data...');
