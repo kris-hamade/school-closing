@@ -10,7 +10,7 @@
   async function fetchClosures() {
     try {
       loading = true;
-      const res = await fetch('/api/closures');
+      const res = await fetch('https://snowday.hamy.app/api/closures');
       if (!res.ok) {
         throw new Error('Failed to fetch closures data');
       }
