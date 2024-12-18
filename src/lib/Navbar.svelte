@@ -4,6 +4,7 @@
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
   <div class="container-fluid">
+    <img src="/images/logo.png" alt="Logo" class="navbar-logo" style="width: 5em; height: 5em;">
     <a class="navbar-brand" href="/">Michigan School Closures</a>
     {#if $lastUpdated}
       <div class="last-updated">

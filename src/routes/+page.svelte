@@ -105,18 +105,28 @@
 }
 .filter-container {
   display: flex;
-  align-items: center;
+  flex-direction: column; /* Stacks children vertically on small screens */
+  align-items: flex-start; /* Aligns children to the left */
   margin-bottom: 20px;
+  width: 100%; /* Ensures the container spans the screen */
 }
+
 #isd-selector {
+  width: 100%; /* Makes the select dropdown span the width of the container */
+  max-width: 400px; /* Optional: Limits the maximum width for better appearance */
   background-color: #121212;
   border-color: #383838;
   color: white;
+  padding: 0.5rem;
+  border-radius: 5px;
+  box-sizing: border-box; /* Includes padding and border in width calculation */
 }
+
 #isd-selector option {
   background-color: #121212;
   color: white;
 }
+
 .data-closed {
   color: #ef4444;
 }
