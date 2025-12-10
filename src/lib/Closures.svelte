@@ -419,12 +419,6 @@
 	</select>
 </div>
 
-		{#if metadata?.lastUpdated}
-			<div class="text-sm text-gray-300">
-				Data last updated: {new Date(metadata.lastUpdated).toLocaleString()}
-			</div>
-		{/if}
-
 	<div class="search-container mb-3">
 		<label for="school-search" class="block mb-2 text-sm font-medium">Search Schools:</label>
 		<div class="search-input-wrapper">

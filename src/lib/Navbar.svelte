@@ -4,7 +4,9 @@
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
   <div class="container-fluid">
-    <img src="/images/logo.png" alt="Logo" class="navbar-logo" style="width: 5em; height: 5em;">
+    <a href="/" class="navbar-logo-link">
+      <img src="/images/logo.png" alt="Logo" class="navbar-logo" style="width: 5em; height: 5em;">
+    </a>
     <a class="navbar-brand" href="/">Michigan School Closures</a>
     {#if $lastUpdated}
       <div class="last-updated">
@@ -19,6 +21,11 @@
 .navbar {
   padding: 10px 20px;
   border-bottom: 1px solid #383838;
+}
+
+.navbar-logo-link {
+  text-decoration: none;
+  display: inline-block;
 }
 
 .navbar-brand {
