@@ -63,7 +63,7 @@
 			if (shouldShowLoading) {
 			loading = true;
 			}
-			const res = await fetch('http://localhost:3023/api/closures');
+			const res = await fetch('https://snowday.hamy.app/api/closures');
 			if (!res.ok) {
 				throw new Error('Failed to fetch closures data');
 			}
