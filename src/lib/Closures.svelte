@@ -11,10 +11,12 @@
 	let loading = true;
 	let initialLoad = true;
 	let error = null;
+	let retrying = false;
 	let searchQuery = '';
 	let searchResults = [];
 	let searching = false;
 	let searchError = null;
+	let retryingSearch = false;
 	let expandedISDs = new Set();
 	let expandedCounties = new Set();
 	let lastISDFilter = '';
@@ -38,8 +40,12 @@
 		}, 300);
 	}
 
-	async function performSearch(query) {
+	async function performSearch(query, isRetry = false) {
 		try {
+			if (isRetry) {
+				retryingSearch = true;
+				searchError = null;
+			}
 			searchError = null;
 			const encodedQuery = encodeURIComponent(query);
 			const res = await fetch(`https://snowday.hamy.app/api/closures/school/${encodedQuery}`);
@@ -48,20 +54,35 @@
 			}
 			const data = await res.json();
 			searchResults = data.results || [];
+			searchError = null; // Clear error on success
 		} catch (err) {
 			console.error(err);
 			searchError = 'Failed to search schools';
 			searchResults = [];
 		} finally {
 			searching = false;
+			retryingSearch = false;
 		}
 	}
 
-	async function fetchClosures() {
+	async function handleSearchRetry(event) {
+		if (event) {
+			event.preventDefault();
+			event.stopPropagation();
+		}
+		await performSearch(searchQuery, true);
+	}
+
+	async function fetchClosures(isRetry = false) {
 		try {
-			const shouldShowLoading = initialLoad;
-			if (shouldShowLoading) {
-			loading = true;
+			if (isRetry) {
+				retrying = true;
+				error = null;
+			} else {
+				const shouldShowLoading = initialLoad;
+				if (shouldShowLoading) {
+					loading = true;
+				}
 			}
 			const res = await fetch('https://snowday.hamy.app/api/closures');
 			if (!res.ok) {
@@ -104,15 +125,25 @@
 			}
 			dataVersion += 1;
 			initialLoad = false;
+			error = null; // Clear error on success
 		} catch (err) {
 			console.error(err);
 			error = 'Failed to load closures data. Please try again later.';
 		} finally {
-			// Only flip loading off if we turned it on for this fetch
-			if (loading) {
-			loading = false;
+			// Only flip loading off if we turned it on for this fetch (not during retry)
+			if (loading && !isRetry) {
+				loading = false;
 			}
+			retrying = false;
 		}
+	}
+
+	async function handleRetry(event) {
+		if (event) {
+			event.preventDefault();
+			event.stopPropagation();
+		}
+		await fetchClosures(true);
 	}
 
 	function getISDs() {
@@ -476,8 +507,15 @@
 <!-- Error State -->
 {:else if error}
 	<div class="error-container">
-		<p class="text-red-500">⚠️ {error}</p>
-		<button on:click={fetchClosures} class="retry-btn">Retry</button>
+		{#if retrying}
+			<div class="loading-container">
+				<div class="spinner"></div>
+				<p class="mt-4 text-yellow-400">Retrying...</p>
+			</div>
+		{:else}
+			<p class="text-red-500">⚠️ {error}</p>
+			<button on:click={handleRetry} class="retry-btn">Retry</button>
+		{/if}
 	</div>
 <!-- Search Results -->
 {:else if searchQuery}
@@ -488,8 +526,15 @@
 		</div>
 	{:else if searchError}
 		<div class="error-container">
-			<p class="text-red-500">⚠️ {searchError}</p>
-			<button on:click={() => debounceSearch(searchQuery)} class="retry-btn">Retry</button>
+			{#if retryingSearch}
+				<div class="loading-container">
+					<div class="spinner"></div>
+					<p class="mt-4 text-yellow-400">Retrying search...</p>
+				</div>
+			{:else}
+				<p class="text-red-500">⚠️ {searchError}</p>
+				<button on:click={handleSearchRetry} class="retry-btn">Retry</button>
+			{/if}
 		</div>
 	{:else if searchResults.length > 0}
 		<div class="search-results-container">
