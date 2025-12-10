@@ -1,5 +1,5 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { lastUpdated } from '$lib/store.js';
 
 	export let isdFilter = 'Oakland Schools'; // Default to Oakland Schools
@@ -9,6 +9,7 @@
 	let metadata = null;
 	let isdStatus = {};
 	let loading = true;
+	let initialLoad = true;
 	let error = null;
 	let searchQuery = '';
 	let searchResults = [];
@@ -17,6 +18,10 @@
 	let expandedISDs = new Set();
 	let expandedCounties = new Set();
 	let lastISDFilter = '';
+	let dataVersion = 0;
+	const countyEntriesCache = new Map();
+	const schoolEntriesCache = new Map();
+	const isdEntriesCache = new Map();
 
 	// Debounce search
 	let searchTimeout;
@@ -54,7 +59,10 @@
 
 	async function fetchClosures() {
 		try {
-			loading = true;
+			const shouldShowLoading = initialLoad;
+			if (shouldShowLoading) {
+				loading = true;
+			}
 			const res = await fetch('https://snowday.hamy.app/api/closures');
 			if (!res.ok) {
 				throw new Error('Failed to fetch closures data');
@@ -63,6 +71,9 @@
 			
 			// Clear cache when new data arrives
 			countyStatsCache.clear();
+			countyEntriesCache.clear();
+			schoolEntriesCache.clear();
+		isdEntriesCache.clear();
 			
 			// Handle new API structure
 			if (data.closures) {
@@ -81,11 +92,16 @@
 			} else {
 				lastUpdated.set(new Date().toLocaleString());
 			}
+			dataVersion += 1;
+			initialLoad = false;
 		} catch (err) {
 			console.error(err);
 			error = 'Failed to load closures data. Please try again later.';
 		} finally {
-			loading = false;
+			// Only flip loading off if we turned it on for this fetch
+			if (loading) {
+				loading = false;
+			}
 		}
 	}
 
@@ -96,13 +112,20 @@
 		return [...priority, ...nonPriority];
 	}
 
-	function filteredClosures() {
-		if (isdFilter === 'all') return closures;
-		const filtered = {};
-		if (closures[isdFilter]) {
-			filtered[isdFilter] = closures[isdFilter];
+	function getFilteredISDEntries() {
+		const cacheKey = `${dataVersion}|${isdFilter}`;
+		if (isdEntriesCache.has(cacheKey)) return isdEntriesCache.get(cacheKey);
+
+		let entries;
+		if (isdFilter === 'all') {
+			entries = Object.entries(closures);
+		} else if (closures[isdFilter]) {
+			entries = [[isdFilter, closures[isdFilter]]];
+		} else {
+			entries = [];
 		}
-		return filtered;
+		isdEntriesCache.set(cacheKey, entries);
+		return entries;
 	}
 
 	function getISDStatus(isdName) {
@@ -125,6 +148,22 @@
 		};
 		countyStatsCache.set(cacheKey, stats);
 		return stats;
+	}
+
+	function getCountyEntries(isd, counties) {
+		const cacheKey = `${dataVersion}|${isd}`;
+		if (countyEntriesCache.has(cacheKey)) return countyEntriesCache.get(cacheKey);
+		const entries = Object.entries(counties);
+		countyEntriesCache.set(cacheKey, entries);
+		return entries;
+	}
+
+	function getSchoolEntries(isd, county, schools) {
+		const cacheKey = `${dataVersion}|${isd}|${county}`;
+		if (schoolEntriesCache.has(cacheKey)) return schoolEntriesCache.get(cacheKey);
+		const entries = Object.entries(schools);
+		schoolEntriesCache.set(cacheKey, entries);
+		return entries;
 	}
 
 	function toggleISD(isdName, event) {
@@ -162,15 +201,20 @@
 			newSet.add(key);
 		}
 		// Force reactivity by reassigning - this is critical for Svelte
-		expandedCounties = newSet;
+		expandedCounties = new Set(newSet);
 	}
 
 	function isISDExpanded(isdName) {
 		return expandedISDs.has(isdName);
 	}
 
+	// Reactive derived value for county expansion state - convert Set to Array for reactivity
+	$: expandedCountiesArray = Array.from(expandedCounties);
+	
 	function isCountyExpanded(isdName, countyName) {
 		const key = `${isdName}|${countyName}`;
+		// Use the Set directly but access the reactive array to ensure Svelte tracks this
+		// This ensures reactivity works properly
 		return expandedCounties.has(key);
 	}
 
@@ -195,14 +239,18 @@
 	}
 
 
-	function expandAllCountiesForISD(isdName) {
+	async function expandAllCountiesForISD(isdName) {
 		if (!closures[isdName]) return;
 		const newSet = new Set(expandedCounties);
+		// Iterate through counties properly - closures[isdName] is an object with county keys
 		Object.keys(closures[isdName]).forEach((county) => {
 			const key = `${isdName}|${county}`;
 			newSet.add(key);
 		});
-		expandedCounties = newSet;
+		// Force reactivity by creating a completely new Set
+		expandedCounties = new Set(newSet);
+		// Wait for DOM to update to ensure template reactivity
+		await tick();
 	}
 
 	function collapseAllCounties() {
@@ -217,7 +265,7 @@
 			const newISDSet = new Set(expandedISDs);
 			newISDSet.add(isdFilter);
 			expandedISDs = newISDSet;
-			expandAllCountiesForISD(isdFilter);
+			await expandAllCountiesForISD(isdFilter);
 			lastISDFilter = isdFilter;
 		} else if (isdFilter === 'all') {
 			// Collapse all counties when "all" is selected
@@ -231,30 +279,29 @@
 	});
 
 	// Auto-expand ISDs and all counties when filter changes to a specific ISD
-	// Collapse all counties when "all" is selected
+	// Collapse all when switching back to "all" (but allow manual expansion afterward)
 	$: if (Object.keys(closures).length > 0) {
-		if (isdFilter === 'all') {
-			// Collapse all counties when "all" is selected
-			if (expandedCounties.size > 0) {
-				collapseAllCounties();
+		(async () => {
+			if (isdFilter === 'all') {
+				// Only collapse when the filter actually changes to "all"
+				if (lastISDFilter !== 'all') {
+					collapseAllCounties();
+					expandedISDs = new Set();
+					lastISDFilter = 'all';
+				}
+			} else if (closures[isdFilter]) {
+				// Only auto-expand if the filter actually changed (not on data refresh)
+				if (lastISDFilter !== isdFilter) {
+					const newISDSet = new Set(expandedISDs);
+					newISDSet.add(isdFilter);
+					expandedISDs = newISDSet;
+					// Wait for ISD to expand and render, then expand counties
+					await tick();
+					await expandAllCountiesForISD(isdFilter);
+					lastISDFilter = isdFilter;
+				}
 			}
-			// Also collapse all ISDs
-			if (expandedISDs.size > 0) {
-				expandedISDs = new Set();
-			}
-			lastISDFilter = 'all';
-		} else if (isdFilter !== 'all' && closures[isdFilter]) {
-			// Only auto-expand if the filter actually changed (not just on data load)
-			if (lastISDFilter !== isdFilter) {
-				// Expand the ISD
-				const newISDSet = new Set(expandedISDs);
-				newISDSet.add(isdFilter);
-				expandedISDs = newISDSet;
-				// Expand all counties for this ISD
-				expandAllCountiesForISD(isdFilter);
-				lastISDFilter = isdFilter;
-			}
-		}
+		})();
 	}
 </script>
 
@@ -276,6 +323,12 @@
 			{/if}
 		</select>
 	</div>
+
+		{#if metadata?.lastUpdated}
+			<div class="text-sm text-gray-300">
+				Data last updated: {new Date(metadata.lastUpdated).toLocaleString()}
+			</div>
+		{/if}
 
 	<div class="search-container mb-3">
 		<label for="school-search" class="block mb-2 text-sm font-medium">Search Schools:</label>
@@ -382,12 +435,12 @@
 <!-- Main Closures Display -->
 {:else}
 	<div id="closure-container" class="mt-4">
-		{#if Object.keys(filteredClosures()).length === 0}
+		{#if getFilteredISDEntries().length === 0}
 			<div class="empty-state">
 				<p>No closure data available</p>
 			</div>
 		{:else}
-			{#each Object.entries(filteredClosures()) as [isd, counties]}
+			{#each getFilteredISDEntries() as [isd, counties] (isd)}
 				{@const status = getISDStatus(isd)}
 				{@const isExpanded = isISDExpanded(isd)}
 				<div class="isd-block">
@@ -410,9 +463,10 @@
 					</div>
 					{#if isExpanded}
 						<div class="isd-content">
-							{#each Object.entries(counties) as [county, schools] (county)}
+							{#each getCountyEntries(isd, counties) as [county, schools] (county)}
 								{@const countyStats = getCountyStats(county, schools)}
 								{@const countyKey = `${isd}|${county}`}
+								{@const countyExpanded = expandedCountiesArray.includes(countyKey)}
 								<div class="county-block">
 									<div 
 										class="county-header" 
@@ -426,15 +480,15 @@
 											}
 										}}
 									>
-										<span class="expand-icon small">{isCountyExpanded(isd, county) ? '▼' : '▶'}</span>
+										<span class="expand-icon small">{countyExpanded ? '▼' : '▶'}</span>
 										<h3 class="text-xl font-semibold">{county}</h3>
 										<span class="county-stats">
 											({countyStats.closed} closed / {countyStats.total} total)
 										</span>
 									</div>
-									{#if isCountyExpanded(isd, county)}
+									{#if countyExpanded}
 										<div class="schools-list">
-											{#each Object.entries(schools) as [schoolName, data] (schoolName)}
+											{#each getSchoolEntries(isd, county, schools) as [schoolName, data] (schoolName)}
 												<div class="school-item">
 													<span class="school-name">{schoolName}</span>
 													<span class="status-badge" class:badge-closed={data.closed} class:badge-open={!data.closed}>
@@ -526,6 +580,9 @@
 		font-size: 1.5rem;
 		width: 32px;
 		height: 32px;
+		min-width: 32px;
+		min-height: 32px;
+		aspect-ratio: 1 / 1;
 		border-radius: 50%;
 		cursor: pointer;
 		display: flex;
