@@ -42,7 +42,7 @@
 		try {
 			searchError = null;
 			const encodedQuery = encodeURIComponent(query);
-			const res = await fetch(`http://localhost:3023/api/closures/school/${encodedQuery}`);
+			const res = await fetch(`https://snowday.hamy.app/api/closures/school/${encodedQuery}`);
 			if (!res.ok) {
 				throw new Error('Search failed');
 			}
@@ -61,9 +61,9 @@
 		try {
 			const shouldShowLoading = initialLoad;
 			if (shouldShowLoading) {
-				loading = true;
+			loading = true;
 			}
-			const res = await fetch('https://snowday.hamy.app/api/closures');
+			const res = await fetch('http://localhost:3023/api/closures');
 			if (!res.ok) {
 				throw new Error('Failed to fetch closures data');
 			}
@@ -83,14 +83,24 @@
 			} else {
 				// Backward compatibility: if old structure, use directly
 				closures = data;
-				metadata = null;
+				metadata = data.metadata || null;
 				isdStatus = {};
+			}
+
+			// Provide a fallback metadata object so timestamps are always available
+			if (!metadata) {
+				metadata = {
+					lastUpdated: new Date().toISOString(),
+					fetchError: null,
+					dataSource: null,
+					pullHistory: []
+				};
 			}
 			
 			if (metadata?.lastUpdated) {
 				lastUpdated.set(new Date(metadata.lastUpdated).toLocaleString());
 			} else {
-				lastUpdated.set(new Date().toLocaleString());
+			lastUpdated.set(new Date().toLocaleString());
 			}
 			dataVersion += 1;
 			initialLoad = false;
@@ -100,7 +110,7 @@
 		} finally {
 			// Only flip loading off if we turned it on for this fetch
 			if (loading) {
-				loading = false;
+			loading = false;
 			}
 		}
 	}
@@ -130,6 +140,91 @@
 
 	function getISDStatus(isdName) {
 		return isdStatus[isdName] || null;
+	}
+
+	function getISDLastUpdated(isdName) {
+		if (!closures[isdName]) return null;
+		
+		let mostRecent = null;
+		
+		// Structure: closures[isdName][countyName][schoolName] = schoolData
+		// Iterate through all counties
+		Object.values(closures[isdName]).forEach((countyData) => {
+			// countyData is an object with school names as keys
+			Object.values(countyData).forEach((schoolData) => {
+				// schoolData is the school object with lastChecked, closed, etc.
+				if (schoolData && schoolData.lastChecked) {
+					try {
+						const timestamp = new Date(schoolData.lastChecked).getTime();
+						if (!isNaN(timestamp) && (!mostRecent || timestamp > mostRecent)) {
+							mostRecent = timestamp;
+						}
+					} catch (e) {
+						// Invalid date, skip
+					}
+				}
+			});
+		});
+		
+		// If no lastChecked found in schools, fall back to metadata.lastUpdated
+		if (!mostRecent && metadata && metadata.lastUpdated) {
+			try {
+				const metaTimestamp = new Date(metadata.lastUpdated).getTime();
+				if (!isNaN(metaTimestamp)) {
+					mostRecent = metaTimestamp;
+				}
+			} catch (e) {
+				// Invalid date, skip
+			}
+		}
+		
+		return mostRecent ? new Date(mostRecent) : null;
+	}
+
+	function formatRelativeTime(date) {
+		if (!date) return '';
+		
+		const now = new Date();
+		const diffMs = now.getTime() - date.getTime();
+		const diffMins = Math.floor(diffMs / 60000);
+		const diffHours = Math.floor(diffMs / 3600000);
+		const diffDays = Math.floor(diffMs / 86400000);
+		
+		if (diffMins < 1) return 'Just now';
+		if (diffMins < 60) return `${diffMins}m ago`;
+		if (diffHours < 24) return `${diffHours}h ago`;
+		if (diffDays < 7) return `${diffDays}d ago`;
+		
+		// For older dates, show formatted date
+		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+	}
+
+	function formatDateTimeString(dateStr) {
+		if (!dateStr) return null;
+		const date = new Date(dateStr);
+		return Number.isNaN(date.getTime()) ? null : date.toLocaleString();
+	}
+
+	function getSchoolTooltip(schoolData) {
+		// Prefer lastStatusChange when available (when the status actually flipped)
+		const statusChangeTs = formatDateTimeString(schoolData?.lastStatusChange);
+		if (statusChangeTs) {
+			return `Last status change: ${statusChangeTs}`;
+		}
+
+		// Fall back to lastChecked (when we last verified)
+		const lastCheckedTs = formatDateTimeString(schoolData?.lastChecked);
+		if (lastCheckedTs) {
+			return `Last checked: ${lastCheckedTs}`;
+		}
+
+		// Fallback to overall metadata timestamp
+		const metaTimestamp = formatDateTimeString(metadata?.lastUpdated);
+		if (metaTimestamp) {
+			return `Last updated: ${metaTimestamp}`;
+		}
+
+		return 'Last updated: not available';
 	}
 
 	// Memoize county stats to avoid recalculating
@@ -309,20 +404,20 @@
 <div class="controls-section mb-4">
 	<div class="filter-container mb-3">
 		<label for="isd-selector" class="block mb-2 text-sm font-medium">Filter by ISD:</label>
-		<select
-			id="isd-selector"
-			bind:value={isdFilter}
-			on:change={saveISDToSession}
-			class="p-2 rounded border bg-gray-800 text-white"
-		>
-			<option value="all">All ISDs</option>
-			{#if closures && Object.keys(closures).length > 0}
-				{#each getISDs() as isd}
-					<option value={isd}>{isd}</option>
-				{/each}
-			{/if}
-		</select>
-	</div>
+	<select
+		id="isd-selector"
+		bind:value={isdFilter}
+		on:change={saveISDToSession}
+		class="p-2 rounded border bg-gray-800 text-white"
+	>
+		<option value="all">All ISDs</option>
+		{#if closures && Object.keys(closures).length > 0}
+			{#each getISDs() as isd}
+				<option value={isd}>{isd}</option>
+			{/each}
+		{/if}
+	</select>
+</div>
 
 		{#if metadata?.lastUpdated}
 			<div class="text-sm text-gray-300">
@@ -382,7 +477,7 @@
 {#if loading}
 	<div class="loading-container">
 		<div class="spinner"></div>
-		<p class="mt-4 text-yellow-400">Loading data...</p>
+	<p class="mt-4 text-yellow-400">Loading data...</p>
 	</div>
 <!-- Error State -->
 {:else if error}
@@ -406,22 +501,24 @@
 		<div class="search-results-container">
 			<h2 class="text-2xl font-bold mb-4">Search Results for "{searchQuery}"</h2>
 			<div class="search-results-list">
-				{#each searchResults as result}
-					<div class="search-result-item">
-						<div class="result-header">
-							<span class="result-school-name">{result.school}</span>
-							<span class="status-badge" class:badge-closed={result.closed} class:badge-open={!result.closed}>
-								{result.closed ? 'Closed' : 'Open'}
-							</span>
-						</div>
+							{#each searchResults as result}
+								<div class="search-result-item">
+									<div class="result-header">
+										<span class="result-school-name">{result.school}</span>
+										<span 
+											class="status-badge" 
+											class:badge-closed={result.closed} 
+											class:badge-open={!result.closed}
+											title={getSchoolTooltip(result)}
+										>
+											{result.closed ? 'Closed' : 'Open'}
+										</span>
+									</div>
 						<div class="result-details">
 							<span class="result-isd">{result.isd}</span>
 							<span class="result-separator">•</span>
 							<span class="result-county">{result.county}</span>
-						</div>
-						{#if result.originalStatus && result.originalStatus !== (result.closed ? 'Closed' : 'Open')}
-							<div class="result-status">Status: {result.originalStatus}</div>
-						{/if}
+							</div>
 					</div>
 				{/each}
 			</div>
@@ -482,36 +579,39 @@
 									>
 										<span class="expand-icon small">{countyExpanded ? '▼' : '▶'}</span>
 										<h3 class="text-xl font-semibold">{county}</h3>
-										<span class="county-stats">
-											({countyStats.closed} closed / {countyStats.total} total)
-										</span>
+										{#if countyStats.closed === 0}
+											<span class="badge badge-open county-badge">ALL OPEN</span>
+										{:else if countyStats.closed === countyStats.total}
+											<span class="badge badge-all-closed county-badge">ALL CLOSED</span>
+										{:else}
+											<span class="badge badge-partial county-badge">
+												{countyStats.closed} OF {countyStats.total} CLOSED
+											</span>
+										{/if}
 									</div>
 									{#if countyExpanded}
 										<div class="schools-list">
-											{#each getSchoolEntries(isd, county, schools) as [schoolName, data] (schoolName)}
-												<div class="school-item">
-													<span class="school-name">{schoolName}</span>
-													<span class="status-badge" class:badge-closed={data.closed} class:badge-open={!data.closed}>
-														{data.closed ? '● Closed' : '● Open'}
-													</span>
-													{#if data.matchScore != null}
-														<span class="match-score" title="Match confidence: {data.matchScore}%">
-															({data.matchScore}%)
+												{#each getSchoolEntries(isd, county, schools) as [schoolName, data] (schoolName)}
+													<div class="school-item">
+														<span class="school-name">{schoolName}</span>
+														<span 
+															class="status-badge" 
+															class:badge-closed={data.closed} 
+															class:badge-open={!data.closed}
+															title={getSchoolTooltip(data)}
+														>
+															{data.closed ? '● Closed' : '● Open'}
 														</span>
-													{/if}
-													{#if data.originalStatus && data.originalStatus !== (data.closed ? 'Closed' : 'Open')}
-														<span class="original-status">— {data.originalStatus}</span>
-													{/if}
-												</div>
-											{/each}
+													</div>
+												{/each}
 										</div>
 									{/if}
 								</div>
 							{/each}
 						</div>
 					{/if}
-				</div>
-			{/each}
+			</div>
+		{/each}
 		{/if}
 	</div>
 {/if}
@@ -884,9 +984,8 @@
 		flex: 1;
 	}
 
-	.county-stats {
-		font-size: 0.875rem;
-		color: #a0a0a0;
+	.county-badge {
+		font-size: 0.75rem;
 	}
 
 	.schools-list {

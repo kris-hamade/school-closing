@@ -8,7 +8,8 @@
     <a class="navbar-brand" href="/">Michigan School Closures</a>
     {#if $lastUpdated}
       <div class="last-updated">
-        Last Updated: {$lastUpdated}
+        <span class="last-updated-label">Last pulled from source:</span>
+        <span class="last-updated-time">{$lastUpdated}</span>
       </div>
     {/if}
   </div>
@@ -30,5 +31,31 @@
   font-size: 0.875rem;
   color: #d1d5db;
   margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.last-updated-label {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.last-updated-time {
+  font-weight: 500;
+  color: #d1d5db;
+}
+
+@media (max-width: 768px) {
+  .last-updated {
+    font-size: 0.75rem;
+  }
+  
+  .last-updated-label {
+    font-size: 0.7rem;
+  }
 }
 </style>
