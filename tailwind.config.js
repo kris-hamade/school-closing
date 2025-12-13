@@ -1,4 +1,4 @@
 module.exports = {
-    darkMode: 'class',
-    // other configurations...
-}
+	darkMode: 'class'
+	// other configurations...
+};

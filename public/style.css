@@ -1,82 +1,79 @@
 body {
-    background-color: #1f2022;
+	background-color: #1f2022;
 }
 
 h2 {
-    font-size: 1.8rem; /* Larger font for ISD headers */
-    color: #ffffff; /* Ensure consistency */
+	font-size: 1.8rem; /* Larger font for ISD headers */
+	color: #ffffff; /* Ensure consistency */
 }
 
 h3 {
-    font-size: 1.4rem; /* Slightly smaller for counties */
-    color: #dcdcdc; /* Subtle contrast for differentiation */
+	font-size: 1.4rem; /* Slightly smaller for counties */
+	color: #dcdcdc; /* Subtle contrast for differentiation */
 }
 
 p {
-    font-size: 1rem; /* Default font size for body text */
-    color: #ffffff;
+	font-size: 1rem; /* Default font size for body text */
+	color: #ffffff;
 }
-
 
 #closure-container {
-    max-width: 900px; /* Slightly wider container */
-    margin: 20px auto; /* Add vertical spacing */
-    padding: 20px;
-    background-color: #1e1e1e; /* Background for better readability */
-    border-radius: 10px; /* Rounded corners for modern look */
-    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.5); /* Subtle shadow for depth */
+	max-width: 900px; /* Slightly wider container */
+	margin: 20px auto; /* Add vertical spacing */
+	padding: 20px;
+	background-color: #1e1e1e; /* Background for better readability */
+	border-radius: 10px; /* Rounded corners for modern look */
+	box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.5); /* Subtle shadow for depth */
 }
 
-
 #isd-selector {
-    background-color: #121212;
-    border-color: #383838;
-    color: white; /* Dropdown text color */
+	background-color: #121212;
+	border-color: #383838;
+	color: white; /* Dropdown text color */
 }
 
 #isd-selector option {
-    background-color: #121212; /* Matches dropdown */
-    color: white;
+	background-color: #121212; /* Matches dropdown */
+	color: white;
 }
 
-h2, h3, p {
-    color: white;
+h2,
+h3,
+p {
+	color: white;
 }
-
-
 
 .loader {
-    display: block;
-    border: 5px solid #1f2022; /* Match background */
-    border-top: 5px solid #4caf50; /* Accent color */
-    border-radius: 50%;
-    width: 50px;
-    height: 50px;
-    animation: spin 1.5s linear infinite;
-    margin: 20px auto;
+	display: block;
+	border: 5px solid #1f2022; /* Match background */
+	border-top: 5px solid #4caf50; /* Accent color */
+	border-radius: 50%;
+	width: 50px;
+	height: 50px;
+	animation: spin 1.5s linear infinite;
+	margin: 20px auto;
 }
 
-
 @keyframes spin {
-    0% {
-        transform: rotate(0deg);
-    }
+	0% {
+		transform: rotate(0deg);
+	}
 
-    100% {
-        transform: rotate(360deg);
-    }
+	100% {
+		transform: rotate(360deg);
+	}
 }
 
 /* Toggle Switch Styles */
 .toggle-bg {
-    transition: .4s;
+	transition: 0.4s;
 }
 
 .toggle-dot {
-    transition: .4s;
+	transition: 0.4s;
 }
 
 .text-green-500 {
-    --darkreader-text--tw-text-opacity: 1;
-    color: rgb(79, 240, 186);
+	--darkreader-text--tw-text-opacity: 1;
+	color: rgb(79, 240, 186);
 }
