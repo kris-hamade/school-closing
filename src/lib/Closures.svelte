@@ -89,13 +89,13 @@
 				throw new Error('Failed to fetch closures data');
 			}
 			const data = await res.json();
-			
+
 			// Clear cache when new data arrives
 			countyStatsCache.clear();
 			countyEntriesCache.clear();
 			schoolEntriesCache.clear();
-		isdEntriesCache.clear();
-			
+			isdEntriesCache.clear();
+
 			// Handle new API structure
 			if (data.closures) {
 				closures = data.closures;
@@ -117,11 +117,11 @@
 					pullHistory: []
 				};
 			}
-			
+
 			if (metadata?.lastUpdated) {
 				lastUpdated.set(new Date(metadata.lastUpdated).toLocaleString());
 			} else {
-			lastUpdated.set(new Date().toLocaleString());
+				lastUpdated.set(new Date().toLocaleString());
 			}
 			dataVersion += 1;
 			initialLoad = false;
@@ -175,9 +175,9 @@
 
 	function getISDLastUpdated(isdName) {
 		if (!closures[isdName]) return null;
-		
+
 		let mostRecent = null;
-		
+
 		// Structure: closures[isdName][countyName][schoolName] = schoolData
 		// Iterate through all counties
 		Object.values(closures[isdName]).forEach((countyData) => {
@@ -196,7 +196,7 @@
 				}
 			});
 		});
-		
+
 		// If no lastChecked found in schools, fall back to metadata.lastUpdated
 		if (!mostRecent && metadata && metadata.lastUpdated) {
 			try {
@@ -208,26 +208,31 @@
 				// Invalid date, skip
 			}
 		}
-		
+
 		return mostRecent ? new Date(mostRecent) : null;
 	}
 
 	function formatRelativeTime(date) {
 		if (!date) return '';
-		
+
 		const now = new Date();
 		const diffMs = now.getTime() - date.getTime();
 		const diffMins = Math.floor(diffMs / 60000);
 		const diffHours = Math.floor(diffMs / 3600000);
 		const diffDays = Math.floor(diffMs / 86400000);
-		
+
 		if (diffMins < 1) return 'Just now';
 		if (diffMins < 60) return `${diffMins}m ago`;
 		if (diffHours < 24) return `${diffHours}h ago`;
 		if (diffDays < 7) return `${diffDays}d ago`;
-		
+
 		// For older dates, show formatted date
-		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+		return date.toLocaleDateString('en-US', {
+			month: 'short',
+			day: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		});
 	}
 
 	function formatDateTimeString(dateStr) {
@@ -336,7 +341,7 @@
 
 	// Reactive derived value for county expansion state - convert Set to Array for reactivity
 	$: expandedCountiesArray = Array.from(expandedCounties);
-	
+
 	function isCountyExpanded(isdName, countyName) {
 		const key = `${isdName}|${countyName}`;
 		// Use the Set directly but access the reactive array to ensure Svelte tracks this
@@ -363,7 +368,6 @@
 			isdFilter = 'Oakland Schools';
 		}
 	}
-
 
 	async function expandAllCountiesForISD(isdName) {
 		if (!closures[isdName]) return;
@@ -435,20 +439,20 @@
 <div class="controls-section mb-4">
 	<div class="filter-container mb-3">
 		<label for="isd-selector" class="block mb-2 text-sm font-medium">Filter by ISD:</label>
-	<select
-		id="isd-selector"
-		bind:value={isdFilter}
-		on:change={saveISDToSession}
-		class="p-2 rounded border bg-gray-800 text-white"
-	>
-		<option value="all">All ISDs</option>
-		{#if closures && Object.keys(closures).length > 0}
-			{#each getISDs() as isd}
-				<option value={isd}>{isd}</option>
-			{/each}
-		{/if}
-	</select>
-</div>
+		<select
+			id="isd-selector"
+			bind:value={isdFilter}
+			on:change={saveISDToSession}
+			class="p-2 rounded border bg-gray-800 text-white"
+		>
+			<option value="all">All ISDs</option>
+			{#if closures && Object.keys(closures).length > 0}
+				{#each getISDs() as isd}
+					<option value={isd}>{isd}</option>
+				{/each}
+			{/if}
+		</select>
+	</div>
 
 	<div class="search-container mb-3">
 		<label for="school-search" class="block mb-2 text-sm font-medium">Search Schools:</label>
@@ -462,11 +466,7 @@
 				class="p-2 rounded border bg-gray-800 text-white flex-1"
 			/>
 			{#if searchQuery}
-				<button
-					on:click={clearSearch}
-					class="clear-search-btn"
-					aria-label="Clear search"
-				>
+				<button on:click={clearSearch} class="clear-search-btn" aria-label="Clear search">
 					×
 				</button>
 			{/if}
@@ -502,9 +502,9 @@
 {#if loading}
 	<div class="loading-container">
 		<div class="spinner"></div>
-	<p class="mt-4 text-yellow-400">Loading data...</p>
+		<p class="mt-4 text-yellow-400">Loading data...</p>
 	</div>
-<!-- Error State -->
+	<!-- Error State -->
 {:else if error}
 	<div class="error-container">
 		{#if retrying}
@@ -517,7 +517,7 @@
 			<button on:click={handleRetry} class="retry-btn">Retry</button>
 		{/if}
 	</div>
-<!-- Search Results -->
+	<!-- Search Results -->
 {:else if searchQuery}
 	{#if searching}
 		<div class="loading-container">
@@ -540,24 +540,24 @@
 		<div class="search-results-container">
 			<h2 class="text-2xl font-bold mb-4">Search Results for "{searchQuery}"</h2>
 			<div class="search-results-list">
-							{#each searchResults as result}
-								<div class="search-result-item">
-									<div class="result-header">
-										<span class="result-school-name">{result.school}</span>
-										<span 
-											class="status-badge" 
-											class:badge-closed={result.closed} 
-											class:badge-open={!result.closed}
-											title={getSchoolTooltip(result)}
-										>
-											{result.closed ? 'Closed' : 'Open'}
-										</span>
-									</div>
+				{#each searchResults as result}
+					<div class="search-result-item">
+						<div class="result-header">
+							<span class="result-school-name">{result.school}</span>
+							<span
+								class="status-badge"
+								class:badge-closed={result.closed}
+								class:badge-open={!result.closed}
+								title={getSchoolTooltip(result)}
+							>
+								{result.closed ? 'Closed' : 'Open'}
+							</span>
+						</div>
 						<div class="result-details">
 							<span class="result-isd">{result.isd}</span>
 							<span class="result-separator">•</span>
 							<span class="result-county">{result.county}</span>
-							</div>
+						</div>
 					</div>
 				{/each}
 			</div>
@@ -568,7 +568,7 @@
 			<button on:click={clearSearch} class="clear-search-link">Clear search</button>
 		</div>
 	{/if}
-<!-- Main Closures Display -->
+	<!-- Main Closures Display -->
 {:else}
 	<div id="closure-container" class="mt-4">
 		{#if getFilteredISDEntries().length === 0}
@@ -589,7 +589,9 @@
 									{#if status.allClosed}
 										<span class="badge badge-all-closed">All Closed</span>
 									{:else if status.closedCount > 0}
-										<span class="badge badge-partial">{status.closedCount} of {status.totalCount} Closed</span>
+										<span class="badge badge-partial"
+											>{status.closedCount} of {status.totalCount} Closed</span
+										>
 									{:else}
 										<span class="badge badge-open">All Open</span>
 									{/if}
@@ -604,8 +606,8 @@
 								{@const countyKey = `${isd}|${county}`}
 								{@const countyExpanded = expandedCountiesArray.includes(countyKey)}
 								<div class="county-block">
-									<div 
-										class="county-header" 
+									<div
+										class="county-header"
 										on:click={(e) => toggleCounty(isd, county, e)}
 										role="button"
 										tabindex="0"
@@ -630,27 +632,27 @@
 									</div>
 									{#if countyExpanded}
 										<div class="schools-list">
-												{#each getSchoolEntries(isd, county, schools) as [schoolName, data] (schoolName)}
-													<div class="school-item">
-														<span class="school-name">{schoolName}</span>
-														<span 
-															class="status-badge" 
-															class:badge-closed={data.closed} 
-															class:badge-open={!data.closed}
-															title={getSchoolTooltip(data)}
-														>
-															{data.closed ? '● Closed' : '● Open'}
-														</span>
-													</div>
-												{/each}
+											{#each getSchoolEntries(isd, county, schools) as [schoolName, data] (schoolName)}
+												<div class="school-item">
+													<span class="school-name">{schoolName}</span>
+													<span
+														class="status-badge"
+														class:badge-closed={data.closed}
+														class:badge-open={!data.closed}
+														title={getSchoolTooltip(data)}
+													>
+														{data.closed ? '● Closed' : '● Open'}
+													</span>
+												</div>
+											{/each}
 										</div>
 									{/if}
 								</div>
 							{/each}
 						</div>
 					{/if}
-			</div>
-		{/each}
+				</div>
+			{/each}
 		{/if}
 	</div>
 {/if}
@@ -826,8 +828,12 @@
 	}
 
 	@keyframes spin {
-		0% { transform: rotate(0deg); }
-		100% { transform: rotate(360deg); }
+		0% {
+			transform: rotate(0deg);
+		}
+		100% {
+			transform: rotate(360deg);
+		}
 	}
 
 	/* Error State */

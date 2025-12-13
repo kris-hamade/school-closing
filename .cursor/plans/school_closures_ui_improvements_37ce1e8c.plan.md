@@ -76,16 +76,16 @@ Enhance the school closures application with improved UI/UX, statistics dashboar
 
 ### 5. Enhanced Visual Display
 
-- **ISD Status Indicators**: 
+- **ISD Status Indicators**:
 - Show badges/icons for ISD-level status (all closed, partially closed, fully open)
 - Use `isdStatus.allClosed`, `closedCount`, `totalCount` from API
-- **School Status Badges**: 
+- **School Status Badges**:
 - Replace text with visual badges/icons for closed/open
 - Use color coding (red for closed, green for open)
-- **Collapsible Sections**: 
+- **Collapsible Sections**:
 - Make ISD and county sections collapsible/expandable
 - Show counts in headers (e.g., "Oakland Schools (5 closed / 20 total)")
-- **Match Score Display**: 
+- **Match Score Display**:
 - Show confidence indicator if `matchScore` is available
 - Display `originalStatus` if different from boolean closed status
 
@@ -117,7 +117,7 @@ Enhance the school closures application with improved UI/UX, statistics dashboar
 
 ## Files to Modify
 
-1. **[src/lib/Closures.svelte](src/lib/Closures.svelte)**: 
+1. **[src/lib/Closures.svelte](src/lib/Closures.svelte)**:
 
 - Update API response handling
 - Add statistics dashboard
@@ -125,11 +125,11 @@ Enhance the school closures application with improved UI/UX, statistics dashboar
 - Enhance visual display with badges, collapsible sections
 - Improve error handling
 
-2. **[src/routes/+page.svelte](src/routes/+page.svelte)**: 
+2. **[src/routes/+page.svelte](src/routes/+page.svelte)**:
 
 - Change default `isdFilter` to `'Oakland Schools'`
 
-3. **[src/lib/store.js](src/lib/store.js)**: 
+3. **[src/lib/store.js](src/lib/store.js)**:
 
 - Potentially add stores for search state, statistics
 
