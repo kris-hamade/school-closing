@@ -1,6 +1,6 @@
 <script>
 	import { onDestroy, onMount, tick } from 'svelte';
-	import { lastUpdated, locationContext } from '$lib/store.js';
+	import { backendSource, lastUpdated, locationContext } from '$lib/store.js';
 	import { getClosuresUrl } from '$lib/config.js';
 
 	export let isdFilter = 'all';
@@ -111,6 +111,10 @@
 			const res = await fetch(getClosuresUrl(), {
 				signal: closuresController.signal
 			});
+			const connectedBackend = res.headers.get('x-closures-upstream');
+			if (connectedBackend === 'local' || connectedBackend === 'production') {
+				backendSource.set(connectedBackend);
+			}
 			if (!res.ok) {
 				throw new Error(`Failed to fetch closures data (${res.status})`);
 			}
@@ -153,6 +157,7 @@
 			error = null; // Clear error on success
 			refreshError = null;
 		} catch (err) {
+			backendSource.set('unavailable');
 			if (err.name === 'AbortError' && hasExistingData) return;
 			console.error(err);
 			if (hasExistingData) {
@@ -430,6 +435,12 @@
 		searchResults = [];
 		searching = false;
 		await applyISDFilter(result.isd, { persist: true, manual: true });
+		await tick();
+		requestAnimationFrame(() => {
+			document
+				.getElementById(`isd-${encodeURIComponent(result.isd)}`)
+				?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		});
 	}
 
 	async function expandAllCountiesForISD(isdName) {
@@ -633,7 +644,7 @@
 			{#each filteredISDEntries as [isd, counties] (isd)}
 				{@const status = getISDStatus(isd)}
 				{@const isExpanded = expandedISDs.has(isd)}
-				<div class="isd-block">
+				<div class="isd-block" id={`isd-${encodeURIComponent(isd)}`}>
 					<div
 						class="isd-header"
 						on:click={(e) => toggleISD(isd, e)}
@@ -1082,6 +1093,7 @@
 
 	/* ISD Block */
 	.isd-block {
+		scroll-margin-top: 1.25rem;
 		background-color: #131c28;
 		border: 1px solid #2a3749;
 		border-radius: 14px;

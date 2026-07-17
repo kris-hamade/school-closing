@@ -1,5 +1,6 @@
 <script>
 	import Navbar from '$lib/Navbar.svelte';
+	import Footer from '$lib/Footer.svelte';
 </script>
 
 <Navbar />
@@ -7,6 +8,8 @@
 <main class="content">
 	<slot />
 </main>
+
+<Footer />
 
 <style>
 	:global(*) {
