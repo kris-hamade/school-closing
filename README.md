@@ -1,4 +1,23 @@
-# sv
+# Michigan School Closures
+
+SvelteKit frontend for Michigan school closure status, district search, and local weather.
+
+## Local backend
+
+During `npm run dev`, API requests automatically prefer a backend running at
+`http://127.0.0.1:3023`. If it is not reachable within 1.2 seconds, the frontend
+falls back to the production API at `https://snowday.hamy.app`.
+
+Override the local address in `.env` when needed:
+
+```env
+LOCAL_CLOSURES_API_URL=http://127.0.0.1:3023/api/closures
+```
+
+The frontend response includes an `x-closures-upstream` header containing
+`local` or `production`, which makes the selected backend easy to verify.
+
+## Development
 
 Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
 

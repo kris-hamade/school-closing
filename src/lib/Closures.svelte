@@ -1,8 +1,9 @@
 <script>
-	import { onMount, tick } from 'svelte';
-	import { lastUpdated } from '$lib/store.js';
+	import { onDestroy, onMount, tick } from 'svelte';
+	import { lastUpdated, locationContext } from '$lib/store.js';
+	import { getClosuresUrl } from '$lib/config.js';
 
-	export let isdFilter = 'Oakland Schools'; // Default to Oakland Schools
+	export let isdFilter = 'all';
 	const priorityISDs = ['Oakland Schools', 'Wayne County Regional Educational Service Agency']; // Define your priority ISDs
 
 	let closures = {};
@@ -11,6 +12,7 @@
 	let loading = true;
 	let initialLoad = true;
 	let error = null;
+	let refreshError = null;
 	let retrying = false;
 	let searchQuery = '';
 	let searchResults = [];
@@ -19,11 +21,17 @@
 	let retryingSearch = false;
 	let expandedISDs = new Set();
 	let expandedCounties = new Set();
-	let lastISDFilter = '';
+	let filteredISDEntries = [];
+	let hasManualISDSelection = false;
+	let lastLocationCounty = '';
+	let locationMessage = '';
 	let dataVersion = 0;
+	let searchRequestId = 0;
+	let searchController;
+	let closuresController;
+	let refreshInterval;
 	const countyEntriesCache = new Map();
 	const schoolEntriesCache = new Map();
-	const isdEntriesCache = new Map();
 
 	// Debounce search
 	let searchTimeout;
@@ -41,27 +49,39 @@
 	}
 
 	async function performSearch(query, isRetry = false) {
+		const normalizedQuery = query.trim();
+		const requestId = ++searchRequestId;
+		searchController?.abort();
+		searchController = new AbortController();
+		const timeout = setTimeout(() => searchController.abort(), 8000);
 		try {
 			if (isRetry) {
 				retryingSearch = true;
 				searchError = null;
 			}
 			searchError = null;
-			const encodedQuery = encodeURIComponent(query);
-			const res = await fetch(`https://snowday.hamy.app/api/closures/school/${encodedQuery}`);
+			const encodedQuery = encodeURIComponent(normalizedQuery);
+			const res = await fetch(getClosuresUrl(`school/${encodedQuery}`), {
+				signal: searchController.signal
+			});
 			if (!res.ok) {
-				throw new Error('Search failed');
+				throw new Error(`Search failed (${res.status})`);
 			}
 			const data = await res.json();
-			searchResults = data.results || [];
+			if (requestId !== searchRequestId) return;
+			searchResults = Array.isArray(data.results) ? data.results : [];
 			searchError = null; // Clear error on success
 		} catch (err) {
+			if (requestId !== searchRequestId || err.name === 'AbortError') return;
 			console.error(err);
-			searchError = 'Failed to search schools';
+			searchError = 'School search is temporarily unavailable.';
 			searchResults = [];
 		} finally {
-			searching = false;
-			retryingSearch = false;
+			clearTimeout(timeout);
+			if (requestId === searchRequestId) {
+				searching = false;
+				retryingSearch = false;
+			}
 		}
 	}
 
@@ -74,6 +94,10 @@
 	}
 
 	async function fetchClosures(isRetry = false) {
+		const hasExistingData = Object.keys(closures).length > 0;
+		closuresController?.abort();
+		closuresController = new AbortController();
+		const timeout = setTimeout(() => closuresController.abort(), 12000);
 		try {
 			if (isRetry) {
 				retrying = true;
@@ -84,18 +108,19 @@
 					loading = true;
 				}
 			}
-			const res = await fetch('https://snowday.hamy.app/api/closures');
+			const res = await fetch(getClosuresUrl(), {
+				signal: closuresController.signal
+			});
 			if (!res.ok) {
-				throw new Error('Failed to fetch closures data');
+				throw new Error(`Failed to fetch closures data (${res.status})`);
 			}
 			const data = await res.json();
-			
+			if (!data || typeof data !== 'object') throw new Error('Invalid closures response');
+
 			// Clear cache when new data arrives
-			countyStatsCache.clear();
 			countyEntriesCache.clear();
 			schoolEntriesCache.clear();
-		isdEntriesCache.clear();
-			
+
 			// Handle new API structure
 			if (data.closures) {
 				closures = data.closures;
@@ -117,19 +142,26 @@
 					pullHistory: []
 				};
 			}
-			
+
 			if (metadata?.lastUpdated) {
 				lastUpdated.set(new Date(metadata.lastUpdated).toLocaleString());
 			} else {
-			lastUpdated.set(new Date().toLocaleString());
+				lastUpdated.set(new Date().toLocaleString());
 			}
 			dataVersion += 1;
 			initialLoad = false;
 			error = null; // Clear error on success
+			refreshError = null;
 		} catch (err) {
+			if (err.name === 'AbortError' && hasExistingData) return;
 			console.error(err);
-			error = 'Failed to load closures data. Please try again later.';
+			if (hasExistingData) {
+				refreshError = 'Could not refresh. Showing the most recent data available.';
+			} else {
+				error = 'Closure data is temporarily unavailable. Please try again.';
+			}
 		} finally {
+			clearTimeout(timeout);
 			// Only flip loading off if we turned it on for this fetch (not during retry)
 			if (loading && !isRetry) {
 				loading = false;
@@ -149,25 +181,22 @@
 	function getISDs() {
 		const allISDs = Object.keys(closures);
 		const priority = allISDs.filter((isd) => priorityISDs.includes(isd));
-		const nonPriority = allISDs.filter((isd) => !priorityISDs.includes(isd));
+		const nonPriority = allISDs
+			.filter((isd) => !priorityISDs.includes(isd))
+			.sort((a, b) => a.localeCompare(b));
 		return [...priority, ...nonPriority];
 	}
 
-	function getFilteredISDEntries() {
-		const cacheKey = `${dataVersion}|${isdFilter}`;
-		if (isdEntriesCache.has(cacheKey)) return isdEntriesCache.get(cacheKey);
-
-		let entries;
-		if (isdFilter === 'all') {
-			entries = Object.entries(closures);
-		} else if (closures[isdFilter]) {
-			entries = [[isdFilter, closures[isdFilter]]];
-		} else {
-			entries = [];
+	function getFilteredISDEntries(filter, closureData) {
+		if (filter === 'all') {
+			return getISDs().map((isd) => [isd, closureData[isd]]);
 		}
-		isdEntriesCache.set(cacheKey, entries);
-		return entries;
+		return closureData[filter] ? [[filter, closureData[filter]]] : [];
 	}
+
+	// Pass the dependencies explicitly so Svelte recomputes the rendered list
+	// whenever either the selected ISD or closure payload changes.
+	$: filteredISDEntries = getFilteredISDEntries(isdFilter, closures);
 
 	function getISDStatus(isdName) {
 		return isdStatus[isdName] || null;
@@ -175,9 +204,9 @@
 
 	function getISDLastUpdated(isdName) {
 		if (!closures[isdName]) return null;
-		
+
 		let mostRecent = null;
-		
+
 		// Structure: closures[isdName][countyName][schoolName] = schoolData
 		// Iterate through all counties
 		Object.values(closures[isdName]).forEach((countyData) => {
@@ -196,7 +225,7 @@
 				}
 			});
 		});
-		
+
 		// If no lastChecked found in schools, fall back to metadata.lastUpdated
 		if (!mostRecent && metadata && metadata.lastUpdated) {
 			try {
@@ -208,26 +237,31 @@
 				// Invalid date, skip
 			}
 		}
-		
+
 		return mostRecent ? new Date(mostRecent) : null;
 	}
 
 	function formatRelativeTime(date) {
 		if (!date) return '';
-		
+
 		const now = new Date();
 		const diffMs = now.getTime() - date.getTime();
 		const diffMins = Math.floor(diffMs / 60000);
 		const diffHours = Math.floor(diffMs / 3600000);
 		const diffDays = Math.floor(diffMs / 86400000);
-		
+
 		if (diffMins < 1) return 'Just now';
 		if (diffMins < 60) return `${diffMins}m ago`;
 		if (diffHours < 24) return `${diffHours}h ago`;
 		if (diffDays < 7) return `${diffDays}d ago`;
-		
+
 		// For older dates, show formatted date
-		return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+		return date.toLocaleDateString('en-US', {
+			month: 'short',
+			day: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		});
 	}
 
 	function formatDateTimeString(dateStr) {
@@ -259,11 +293,10 @@
 	}
 
 	// Memoize county stats to avoid recalculating
-	const countyStatsCache = new Map();
-	function getCountyStats(county, schools) {
-		const cacheKey = `${county}-${Object.keys(schools).length}`;
-		if (countyStatsCache.has(cacheKey)) {
-			return countyStatsCache.get(cacheKey);
+	const countyStatsCache = new WeakMap();
+	function getCountyStats(schools) {
+		if (countyStatsCache.has(schools)) {
+			return countyStatsCache.get(schools);
 		}
 		const schoolEntries = Object.entries(schools);
 		const closedCount = schoolEntries.filter(([_, data]) => data.closed).length;
@@ -272,14 +305,14 @@
 			closed: closedCount,
 			open: schoolEntries.length - closedCount
 		};
-		countyStatsCache.set(cacheKey, stats);
+		countyStatsCache.set(schools, stats);
 		return stats;
 	}
 
 	function getCountyEntries(isd, counties) {
 		const cacheKey = `${dataVersion}|${isd}`;
 		if (countyEntriesCache.has(cacheKey)) return countyEntriesCache.get(cacheKey);
-		const entries = Object.entries(counties);
+		const entries = Object.entries(counties).sort(([a], [b]) => a.localeCompare(b));
 		countyEntriesCache.set(cacheKey, entries);
 		return entries;
 	}
@@ -287,7 +320,7 @@
 	function getSchoolEntries(isd, county, schools) {
 		const cacheKey = `${dataVersion}|${isd}|${county}`;
 		if (schoolEntriesCache.has(cacheKey)) return schoolEntriesCache.get(cacheKey);
-		const entries = Object.entries(schools);
+		const entries = Object.entries(schools).sort(([a], [b]) => a.localeCompare(b));
 		schoolEntriesCache.set(cacheKey, entries);
 		return entries;
 	}
@@ -296,10 +329,6 @@
 		if (event) {
 			event.preventDefault();
 			event.stopPropagation();
-		}
-		// Update lastISDFilter to prevent reactive statement from interfering with manual toggles
-		if (isdFilter === isdName) {
-			lastISDFilter = isdName;
 		}
 		// Create a completely new Set to ensure Svelte reactivity
 		const newSet = new Set(expandedISDs);
@@ -330,28 +359,37 @@
 		expandedCounties = new Set(newSet);
 	}
 
-	function isISDExpanded(isdName) {
-		return expandedISDs.has(isdName);
-	}
-
 	// Reactive derived value for county expansion state - convert Set to Array for reactivity
 	$: expandedCountiesArray = Array.from(expandedCounties);
-	
-	function isCountyExpanded(isdName, countyName) {
-		const key = `${isdName}|${countyName}`;
-		// Use the Set directly but access the reactive array to ensure Svelte tracks this
-		// This ensures reactivity works properly
-		return expandedCounties.has(key);
-	}
 
 	function clearSearch() {
+		searchRequestId += 1;
+		searchController?.abort();
 		searchQuery = '';
 		searchResults = [];
 		searchError = null;
+		searching = false;
 	}
 
-	function saveISDToSession() {
-		sessionStorage.setItem('selectedISD', isdFilter);
+	async function applyISDFilter(nextFilter, { persist = false, manual = false } = {}) {
+		isdFilter = nextFilter === 'all' || closures[nextFilter] ? nextFilter : 'all';
+		expandedISDs = new Set();
+		expandedCounties = new Set();
+
+		if (isdFilter !== 'all') {
+			expandedISDs = new Set([isdFilter]);
+			await expandAllCountiesForISD(isdFilter);
+		}
+
+		if (persist) sessionStorage.setItem('selectedISD', isdFilter);
+		if (manual) {
+			hasManualISDSelection = true;
+			locationMessage = '';
+		}
+	}
+
+	function handleISDChange(event) {
+		applyISDFilter(event.currentTarget.value, { persist: true, manual: true });
 	}
 
 	function loadISDFromSession() {
@@ -359,11 +397,40 @@
 		if (storedISD) {
 			isdFilter = storedISD;
 		} else {
-			// Default to Oakland Schools if no stored preference
-			isdFilter = 'Oakland Schools';
+			isdFilter = 'all';
 		}
 	}
 
+	function normalizeCountyName(county) {
+		return (
+			county
+				?.replace(/\s+County$/i, '')
+				.trim()
+				.toLocaleLowerCase() || ''
+		);
+	}
+
+	function findISDForCounty(county) {
+		const targetCounty = normalizeCountyName(county);
+		if (!targetCounty) return null;
+		return (
+			getISDs().find((isd) =>
+				Object.keys(closures[isd] || {}).some(
+					(countyName) => normalizeCountyName(countyName) === targetCounty
+				)
+			) || null
+		);
+	}
+
+	async function focusSearchResult(result) {
+		if (!result?.isd || !closures[result.isd]) return;
+		searchRequestId += 1;
+		searchController?.abort();
+		searchQuery = '';
+		searchResults = [];
+		searching = false;
+		await applyISDFilter(result.isd, { persist: true, manual: true });
+	}
 
 	async function expandAllCountiesForISD(isdName) {
 		if (!closures[isdName]) return;
@@ -379,114 +446,100 @@
 		await tick();
 	}
 
-	function collapseAllCounties() {
-		expandedCounties = new Set();
-	}
-
-	onMount(async () => {
+	onMount(() => {
 		loadISDFromSession();
-		await fetchClosures();
-		// Auto-expand the filtered ISD and all its counties after data loads
-		if (isdFilter !== 'all' && closures[isdFilter]) {
-			const newISDSet = new Set(expandedISDs);
-			newISDSet.add(isdFilter);
-			expandedISDs = newISDSet;
-			await expandAllCountiesForISD(isdFilter);
-			lastISDFilter = isdFilter;
-		} else if (isdFilter === 'all') {
-			// Collapse all counties when "all" is selected
-			collapseAllCounties();
-		}
-		const interval = setInterval(fetchClosures, 60000); // Refresh every 60 seconds
-		return () => {
-			clearInterval(interval);
-			clearTimeout(searchTimeout);
-		};
+		fetchClosures().then(() => applyISDFilter(isdFilter));
+		refreshInterval = setInterval(fetchClosures, 60000);
 	});
 
-	// Auto-expand ISDs and all counties when filter changes to a specific ISD
-	// Collapse all when switching back to "all" (but allow manual expansion afterward)
-	$: if (Object.keys(closures).length > 0) {
-		(async () => {
-			if (isdFilter === 'all') {
-				// Only collapse when the filter actually changes to "all"
-				if (lastISDFilter !== 'all') {
-					collapseAllCounties();
-					expandedISDs = new Set();
-					lastISDFilter = 'all';
-				}
-			} else if (closures[isdFilter]) {
-				// Only auto-expand if the filter actually changed (not on data refresh)
-				if (lastISDFilter !== isdFilter) {
-					const newISDSet = new Set(expandedISDs);
-					newISDSet.add(isdFilter);
-					expandedISDs = newISDSet;
-					// Wait for ISD to expand and render, then expand counties
-					await tick();
-					await expandAllCountiesForISD(isdFilter);
-					lastISDFilter = isdFilter;
-				}
-			}
-		})();
+	onDestroy(() => {
+		clearInterval(refreshInterval);
+		clearTimeout(searchTimeout);
+		searchController?.abort();
+		closuresController?.abort();
+	});
+
+	$: if (
+		$locationContext.status === 'ready' &&
+		$locationContext.county &&
+		Object.keys(closures).length > 0 &&
+		$locationContext.county !== lastLocationCounty
+	) {
+		lastLocationCounty = $locationContext.county;
+		const locatedISD = findISDForCounty($locationContext.county);
+		if (locatedISD && (!hasManualISDSelection || isdFilter === 'all')) {
+			locationMessage = `Showing ${locatedISD} for ${$locationContext.county}`;
+			applyISDFilter(locatedISD);
+		} else if (!locatedISD) {
+			locationMessage = `No Michigan ISD match was found for ${$locationContext.county}`;
+		}
 	}
 </script>
 
 <!-- Search and Filter Section -->
-<div class="controls-section mb-4">
-	<div class="filter-container mb-3">
-		<label for="isd-selector" class="block mb-2 text-sm font-medium">Filter by ISD:</label>
-	<select
-		id="isd-selector"
-		bind:value={isdFilter}
-		on:change={saveISDToSession}
-		class="p-2 rounded border bg-gray-800 text-white"
-	>
-		<option value="all">All ISDs</option>
-		{#if closures && Object.keys(closures).length > 0}
-			{#each getISDs() as isd}
-				<option value={isd}>{isd}</option>
-			{/each}
-		{/if}
-	</select>
-</div>
+<section class="controls-section" aria-label="Closure filters">
+	<div class="filter-container">
+		<label for="isd-selector">Select ISD</label>
+		<select
+			id="isd-selector"
+			bind:value={isdFilter}
+			on:change={handleISDChange}
+			class="p-2 rounded border bg-gray-800 text-white"
+		>
+			<option value="all">All ISDs</option>
+			{#if closures && Object.keys(closures).length > 0}
+				{#each getISDs() as isd}
+					<option value={isd}>{isd}</option>
+				{/each}
+			{/if}
+		</select>
+		{#if locationMessage}<p class="location-context" role="status">{locationMessage}</p>{/if}
+	</div>
 
-	<div class="search-container mb-3">
-		<label for="school-search" class="block mb-2 text-sm font-medium">Search Schools:</label>
+	<div class="search-container">
+		<label for="school-search">Find your school</label>
 		<div class="search-input-wrapper">
 			<input
 				id="school-search"
-				type="text"
+				type="search"
 				bind:value={searchQuery}
-				on:input={(e) => debounceSearch(e.target.value)}
-				placeholder="Enter school name..."
+				on:input={(e) => debounceSearch(e.currentTarget.value)}
+				placeholder="Search by school name"
+				autocomplete="off"
 				class="p-2 rounded border bg-gray-800 text-white flex-1"
 			/>
 			{#if searchQuery}
-				<button
-					on:click={clearSearch}
-					class="clear-search-btn"
-					aria-label="Clear search"
-				>
+				<button on:click={clearSearch} class="clear-search-btn" aria-label="Clear search">
 					×
 				</button>
 			{/if}
 		</div>
 	</div>
-</div>
+</section>
+
+{#if refreshError}
+	<div class="refresh-notice" role="status">
+		<span aria-hidden="true">!</span>
+		{refreshError}
+		<button on:click={handleRetry} disabled={retrying}
+			>{retrying ? 'Refreshing…' : 'Refresh now'}</button
+		>
+	</div>
+{/if}
 
 <!-- Statistics Dashboard -->
 {#if !loading && !error && metadata && isdFilter === 'all'}
 	<div class="stats-dashboard mb-6">
 		<div class="stat-card">
-			<div class="stat-value">{metadata.totalSchools || 0}</div>
+			<div class="stat-value">{metadata.totalSchools ?? 0}</div>
 			<div class="stat-label">Total Schools</div>
 		</div>
 		<div class="stat-card stat-closed">
-			<div class="stat-value">{metadata.closedSchools || 0}</div>
+			<div class="stat-value">{metadata.closedSchools ?? 0}</div>
 			<div class="stat-label">Closed</div>
 		</div>
 		<div class="stat-card stat-open">
-			<div class="stat-value">{(metadata.totalSchools || 0) - (metadata.closedSchools || 0)}</div>
+			<div class="stat-value">{(metadata.totalSchools ?? 0) - (metadata.closedSchools ?? 0)}</div>
 			<div class="stat-label">Open</div>
 		</div>
 		{#if metadata.fetchError}
@@ -502,9 +555,9 @@
 {#if loading}
 	<div class="loading-container">
 		<div class="spinner"></div>
-	<p class="mt-4 text-yellow-400">Loading data...</p>
+		<p class="mt-4 text-yellow-400">Loading data...</p>
 	</div>
-<!-- Error State -->
+	<!-- Error State -->
 {:else if error}
 	<div class="error-container">
 		{#if retrying}
@@ -517,7 +570,7 @@
 			<button on:click={handleRetry} class="retry-btn">Retry</button>
 		{/if}
 	</div>
-<!-- Search Results -->
+	<!-- Search Results -->
 {:else if searchQuery}
 	{#if searching}
 		<div class="loading-container">
@@ -540,25 +593,26 @@
 		<div class="search-results-container">
 			<h2 class="text-2xl font-bold mb-4">Search Results for "{searchQuery}"</h2>
 			<div class="search-results-list">
-							{#each searchResults as result}
-								<div class="search-result-item">
-									<div class="result-header">
-										<span class="result-school-name">{result.school}</span>
-										<span 
-											class="status-badge" 
-											class:badge-closed={result.closed} 
-											class:badge-open={!result.closed}
-											title={getSchoolTooltip(result)}
-										>
-											{result.closed ? 'Closed' : 'Open'}
-										</span>
-									</div>
+				{#each searchResults as result}
+					<button class="search-result-item" on:click={() => focusSearchResult(result)}>
+						<div class="result-header">
+							<span class="result-school-name">{result.school}</span>
+							<span
+								class="status-badge"
+								class:badge-closed={result.closed}
+								class:badge-open={!result.closed}
+								title={getSchoolTooltip(result)}
+							>
+								{result.closed ? 'Closed' : 'Open'}
+							</span>
+						</div>
 						<div class="result-details">
 							<span class="result-isd">{result.isd}</span>
 							<span class="result-separator">•</span>
 							<span class="result-county">{result.county}</span>
-							</div>
-					</div>
+						</div>
+						<span class="view-district">View district</span>
+					</button>
 				{/each}
 			</div>
 		</div>
@@ -568,19 +622,31 @@
 			<button on:click={clearSearch} class="clear-search-link">Clear search</button>
 		</div>
 	{/if}
-<!-- Main Closures Display -->
+	<!-- Main Closures Display -->
 {:else}
 	<div id="closure-container" class="mt-4">
-		{#if getFilteredISDEntries().length === 0}
+		{#if filteredISDEntries.length === 0}
 			<div class="empty-state">
 				<p>No closure data available</p>
 			</div>
 		{:else}
-			{#each getFilteredISDEntries() as [isd, counties] (isd)}
+			{#each filteredISDEntries as [isd, counties] (isd)}
 				{@const status = getISDStatus(isd)}
-				{@const isExpanded = isISDExpanded(isd)}
+				{@const isExpanded = expandedISDs.has(isd)}
 				<div class="isd-block">
-					<div class="isd-header" on:click={(e) => toggleISD(isd, e)}>
+					<div
+						class="isd-header"
+						on:click={(e) => toggleISD(isd, e)}
+						role="button"
+						tabindex="0"
+						aria-expanded={isExpanded}
+						on:keydown={(e) => {
+							if (e.key === 'Enter' || e.key === ' ') {
+								e.preventDefault();
+								toggleISD(isd, e);
+							}
+						}}
+					>
 						<div class="isd-header-content">
 							<span class="expand-icon">{isExpanded ? '▼' : '▶'}</span>
 							<h2 class="text-2xl font-bold">{isd}</h2>
@@ -589,7 +655,9 @@
 									{#if status.allClosed}
 										<span class="badge badge-all-closed">All Closed</span>
 									{:else if status.closedCount > 0}
-										<span class="badge badge-partial">{status.closedCount} of {status.totalCount} Closed</span>
+										<span class="badge badge-partial"
+											>{status.closedCount} of {status.totalCount} Closed</span
+										>
 									{:else}
 										<span class="badge badge-open">All Open</span>
 									{/if}
@@ -600,15 +668,16 @@
 					{#if isExpanded}
 						<div class="isd-content">
 							{#each getCountyEntries(isd, counties) as [county, schools] (county)}
-								{@const countyStats = getCountyStats(county, schools)}
+								{@const countyStats = getCountyStats(schools)}
 								{@const countyKey = `${isd}|${county}`}
 								{@const countyExpanded = expandedCountiesArray.includes(countyKey)}
 								<div class="county-block">
-									<div 
-										class="county-header" 
+									<div
+										class="county-header"
 										on:click={(e) => toggleCounty(isd, county, e)}
 										role="button"
 										tabindex="0"
+										aria-expanded={countyExpanded}
 										on:keydown={(e) => {
 											if (e.key === 'Enter' || e.key === ' ') {
 												e.preventDefault();
@@ -630,64 +699,68 @@
 									</div>
 									{#if countyExpanded}
 										<div class="schools-list">
-												{#each getSchoolEntries(isd, county, schools) as [schoolName, data] (schoolName)}
-													<div class="school-item">
-														<span class="school-name">{schoolName}</span>
-														<span 
-															class="status-badge" 
-															class:badge-closed={data.closed} 
-															class:badge-open={!data.closed}
-															title={getSchoolTooltip(data)}
-														>
-															{data.closed ? '● Closed' : '● Open'}
-														</span>
-													</div>
-												{/each}
+											{#each getSchoolEntries(isd, county, schools) as [schoolName, data] (schoolName)}
+												<div class="school-item">
+													<span class="school-name">{schoolName}</span>
+													<span
+														class="status-badge"
+														class:badge-closed={data.closed}
+														class:badge-open={!data.closed}
+														title={getSchoolTooltip(data)}
+													>
+														{data.closed ? '● Closed' : '● Open'}
+													</span>
+												</div>
+											{/each}
 										</div>
 									{/if}
 								</div>
 							{/each}
 						</div>
 					{/if}
-			</div>
-		{/each}
+				</div>
+			{/each}
 		{/if}
 	</div>
 {/if}
 
 <style>
-	.bg-dark {
-		background-color: #1f2022;
-		color: white;
-	}
 	.text-yellow-400 {
 		color: #fbbf24;
 	}
 	.text-red-500 {
 		color: #ef4444;
 	}
-	.text-green-500 {
-		color: #22c55e;
-	}
 
 	/* Controls Section */
 	.controls-section {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
+		display: grid;
+		grid-template-columns: minmax(240px, 0.9fr) minmax(280px, 1.1fr);
+		gap: 1.1rem;
 		width: 100%;
+		padding: 1rem;
+		margin-bottom: 1.2rem;
+		background: rgba(20, 29, 41, 0.9);
+		border: 1px solid rgba(255, 255, 255, 0.09);
+		border-radius: 16px;
+		box-shadow: 0 14px 40px rgba(0, 0, 0, 0.16);
 	}
 
 	.filter-container,
 	.search-container {
 		width: 100%;
-		max-width: 500px;
+		max-width: none;
 	}
 
 	.filter-container label,
 	.search-container label {
-		color: #dcdcdc;
+		display: block;
+		color: #aebbd0;
 		margin-bottom: 0.5rem;
+		font-size: 0.72rem;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
 	}
 
 	.search-input-wrapper {
@@ -699,26 +772,29 @@
 
 	#school-search {
 		width: 100%;
-		background-color: #121212;
-		border: 1px solid #383838;
+		background-color: #0b111a;
+		border: 1px solid #344155;
 		color: white;
-		padding: 0.5rem;
-		border-radius: 5px;
+		padding: 0.75rem 2.8rem 0.75rem 0.9rem;
+		border-radius: 10px;
 		box-sizing: border-box;
 	}
 
 	#school-search:focus {
 		outline: none;
-		border-color: #4a9eff;
+		border-color: #69adf8;
+		box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.13);
 	}
 
 	.clear-search-btn {
-		background: #383838;
+		position: absolute;
+		right: 0.45rem;
+		background: #273448;
 		border: none;
 		color: white;
-		font-size: 1.5rem;
-		width: 32px;
-		height: 32px;
+		font-size: 1.2rem;
+		width: 28px;
+		height: 28px;
 		min-width: 32px;
 		min-height: 32px;
 		aspect-ratio: 1 / 1;
@@ -737,23 +813,70 @@
 
 	#isd-selector {
 		width: 100%;
-		max-width: 500px;
-		background-color: #121212;
-		border: 1px solid #383838;
+		max-width: none;
+		background-color: #0b111a;
+		border: 1px solid #344155;
 		color: white;
-		padding: 0.5rem;
-		border-radius: 5px;
+		padding: 0.75rem 0.9rem;
+		border-radius: 10px;
 		box-sizing: border-box;
 	}
 
 	#isd-selector:focus {
 		outline: none;
-		border-color: #4a9eff;
+		border-color: #69adf8;
+		box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.13);
 	}
 
 	#isd-selector option {
-		background-color: #121212;
+		background-color: #0b111a;
 		color: white;
+	}
+
+	.location-context {
+		margin: 0.5rem 0 0;
+		color: #75b7ff;
+		font-size: 0.75rem;
+		font-weight: 600;
+		text-transform: none;
+		letter-spacing: 0;
+	}
+
+	.refresh-notice {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+		margin: 0 0 1.2rem;
+		padding: 0.75rem 0.9rem;
+		color: #f7d58b;
+		background: rgba(251, 191, 36, 0.08);
+		border: 1px solid rgba(251, 191, 36, 0.3);
+		border-radius: 10px;
+		font-size: 0.84rem;
+	}
+
+	.refresh-notice > span {
+		display: grid;
+		place-items: center;
+		width: 20px;
+		height: 20px;
+		border: 1px solid #f3c75b;
+		border-radius: 50%;
+		font-weight: 800;
+	}
+
+	.refresh-notice button {
+		margin-left: auto;
+		border: 0;
+		color: #ffdf8a;
+		background: transparent;
+		font-weight: 700;
+		cursor: pointer;
+	}
+
+	.refresh-notice button:disabled {
+		opacity: 0.6;
+		cursor: wait;
 	}
 
 	/* Statistics Dashboard */
@@ -765,11 +888,11 @@
 	}
 
 	.stat-card {
-		background-color: #1e1e1e;
-		border-radius: 8px;
+		background-color: #141d29;
+		border-radius: 14px;
 		padding: 1.5rem;
 		text-align: center;
-		border: 1px solid #383838;
+		border: 1px solid #2a3749;
 	}
 
 	.stat-card.stat-closed {
@@ -826,8 +949,12 @@
 	}
 
 	@keyframes spin {
-		0% { transform: rotate(0deg); }
-		100% { transform: rotate(360deg); }
+		0% {
+			transform: rotate(0deg);
+		}
+		100% {
+			transform: rotate(360deg);
+		}
 	}
 
 	/* Error State */
@@ -869,10 +996,28 @@
 	}
 
 	.search-result-item {
+		display: block;
+		width: 100%;
 		background-color: #1e1e1e;
 		border: 1px solid #383838;
 		border-radius: 8px;
 		padding: 1rem;
+		color: inherit;
+		text-align: left;
+		cursor: pointer;
+		transition:
+			border-color 0.2s,
+			transform 0.2s;
+	}
+
+	.search-result-item:hover {
+		border-color: #69adf8;
+		transform: translateY(-1px);
+	}
+
+	.search-result-item:focus-visible {
+		outline: 2px solid #75b7ff;
+		outline-offset: 2px;
 	}
 
 	.result-header {
@@ -903,11 +1048,10 @@
 		color: #383838;
 	}
 
-	.result-status {
-		font-size: 0.875rem;
-		color: #dcdcdc;
-		margin-top: 0.5rem;
-		font-style: italic;
+	.view-district {
+		margin-left: auto;
+		color: #75b7ff;
+		font-weight: 650;
 	}
 
 	/* Empty State */
@@ -938,15 +1082,16 @@
 
 	/* ISD Block */
 	.isd-block {
-		background-color: #1e1e1e;
-		border: 1px solid #383838;
-		border-radius: 10px;
+		background-color: #131c28;
+		border: 1px solid #2a3749;
+		border-radius: 14px;
 		margin-bottom: 1.5rem;
 		overflow: hidden;
+		box-shadow: 0 14px 35px rgba(0, 0, 0, 0.14);
 	}
 
 	.isd-header {
-		background-color: #252525;
+		background-color: #182332;
 		padding: 1.25rem 1.5rem;
 		cursor: pointer;
 		user-select: none;
@@ -954,7 +1099,13 @@
 	}
 
 	.isd-header:hover {
-		background-color: #2a2a2a;
+		background-color: #1d2b3d;
+	}
+
+	.isd-header:focus-visible,
+	.county-header:focus-visible {
+		outline: 2px solid #75b7ff;
+		outline-offset: -3px;
 	}
 
 	.isd-header-content {
@@ -1098,20 +1249,11 @@
 		border: 1px solid #22c55e;
 	}
 
-	.match-score {
-		font-size: 0.75rem;
-		color: #a0a0a0;
-		font-style: italic;
-	}
-
-	.original-status {
-		font-size: 0.875rem;
-		color: #a0a0a0;
-		font-style: italic;
-	}
-
 	/* Responsive Design */
 	@media (max-width: 768px) {
+		.controls-section {
+			grid-template-columns: 1fr;
+		}
 		.stats-dashboard {
 			grid-template-columns: repeat(2, 1fr);
 		}
